@@ -1,0 +1,54 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+ENV/
+
+# Environment variables
+.env
+
+# Database files
+*.db
+
+# Uploaded files
+uploads/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Node
+node_modules/
+package-lock.json
+
+# Test scripts (not part of the app)
+test_*.py
+check_users.py
+migrate_db.py
+update_genders.py
+debug_score.py
+
+# Backup / temp files
+*.bak
+ts_errors.txt
+
+# Frontend build output
+Smart-travel-companion-finder-main/dist/
+Smart-travel-companion-finder-main/dist-ssr/
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
