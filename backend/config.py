@@ -19,3 +19,9 @@ if not DATABASE_URL:
 
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY environment variable is not set")
+
+# Google OAuth Client ID (optional — needed only for Google Sign-In)
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+
+# Google Gemini API Key (optional — used for AI-generated destination tags)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")

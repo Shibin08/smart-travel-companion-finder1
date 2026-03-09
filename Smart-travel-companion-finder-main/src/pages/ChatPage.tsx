@@ -17,7 +17,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const loadedRef = useRef(false);
 
-  useEffect(() => { document.title = 'Chat — Travel Companion Finder'; }, []);
+  useEffect(() => { document.title = 'Chat — TravelMatch'; }, []);
 
   const getLocalMessages = useCallback((id: string, limit: number) => {
     return ChatManager.getInstance().getChatMessages(id, limit);
@@ -26,7 +26,8 @@ export default function ChatPage() {
   useEffect(() => {
     if (!chatId || !user) return;
 
-    // Prevent duplicate loads for the same chatId
+    // Stale-closure guard: if chatId changes before async completes, discard result
+    let cancelled = false;
     loadedRef.current = false;
 
     const inferredUserId = chatId.startsWith('api-') ? chatId.replace('api-', '') : chatId;
@@ -36,7 +37,7 @@ export default function ChatPage() {
     const buildFallbackUser = (name: string, photoUrl?: string): User => ({
       userId: inferredUserId,
       name,
-      email: `${inferredUserId}@example.com`,
+      email: '',
       age: 0,
       gender: 'Other',
       verificationStatus: 'Pending',
@@ -69,6 +70,7 @@ export default function ChatPage() {
       setOtherUser(buildFallbackUser(fallbackName));
       void fetchUserPublicProfile(inferredUserId)
         .then((profile) => {
+          if (cancelled) return;
           const photoUrl = profile.photo_url
             ? (profile.photo_url.startsWith('http') ? profile.photo_url : `${import.meta.env.VITE_API_BASE_URL?.trim() || 'http://127.0.0.1:8000'}${profile.photo_url}`)
             : undefined;
@@ -89,7 +91,7 @@ export default function ChatPage() {
     void (async () => {
       try {
         const backendMessages = await fetchConversation(token, inferredUserId);
-        if (!loadedRef.current) {
+        if (!cancelled && !loadedRef.current) {
           setMessages(
             backendMessages.map((message) => ({
               messageId: `api-${message.message_id}`,
@@ -106,12 +108,14 @@ export default function ChatPage() {
           loadedRef.current = true;
         }
       } catch {
-        if (!loadedRef.current) {
+        if (!cancelled && !loadedRef.current) {
           setMessages(getLocalMessages(chatId, 50));
           loadedRef.current = true;
         }
       }
     })();
+
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, user?.userId]);
 
@@ -235,24 +239,30 @@ export default function ChatPage() {
 
   if (!user) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">Please log in to access chat.</p>
+      <div className="text-center py-12">
+        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl shadow-sm p-8 max-w-sm mx-auto">
+          <p className="text-gray-500">Please log in to access chat.</p>
+        </div>
       </div>
     );
   }
 
   if (!otherUser) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">Chat not found or you don't have permission to access it.</p>
+      <div className="text-center py-12">
+        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl shadow-sm p-8 max-w-sm mx-auto">
+          <p className="text-gray-500">Chat not found or you don't have permission to access it.</p>
+        </div>
       </div>
     );
   }
 
   if (!chatMatch) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500">Unable to load chat context.</p>
+      <div className="text-center py-12">
+        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl shadow-sm p-8 max-w-sm mx-auto">
+          <p className="text-gray-500">Unable to load chat context.</p>
+        </div>
       </div>
     );
   }

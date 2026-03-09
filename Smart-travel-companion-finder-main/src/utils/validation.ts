@@ -218,11 +218,6 @@ export class DataValidator {
     return errors;
   }
 
-
-
-    return errors;
-  }
-
   // Helper Methods
   private static isValidEmail(email: string): boolean {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

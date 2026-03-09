@@ -157,6 +157,17 @@ class PlaceRequest(Base):
     notes = Column(String, nullable=False)
     status = Column(String, nullable=False, default="Open")
     applicants = Column(String, nullable=False, default="")
+    tags = Column(String, nullable=False, default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", foreign_keys=[user_id], back_populates="place_requests")
+
+
+class ReviewVote(Base):
+    """Tracks which users have voted a review as helpful (prevents duplicate votes)."""
+    __tablename__ = "review_votes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    review_id = Column(Integer, ForeignKey("reviews.review_id"), nullable=False, index=True)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))

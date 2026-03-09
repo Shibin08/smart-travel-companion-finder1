@@ -35,6 +35,17 @@ export const validateTripInput = (trip: Trip): string[] => {
   const start = parseISO(trip.startDate);
   const end = parseISO(trip.endDate);
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  if (isBefore(start, today)) {
+    errors.push('Start date cannot be in the past. Please select today or a future date.');
+  }
+
+  if (isBefore(end, today)) {
+    errors.push('End date cannot be in the past. Please select today or a future date.');
+  }
+
   if (isAfter(start, end)) {
     errors.push('Start date cannot be after end date.');
   }

@@ -1,4 +1,4 @@
-# Smart Travel Companion Finder — Frontend
+# TravelMatch — Frontend
 
 React + TypeScript + Vite frontend for travel companion discovery, matching, real-time chat, reviews, emergency SOS, and place request workflows.
 

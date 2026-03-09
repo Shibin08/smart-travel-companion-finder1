@@ -133,6 +133,21 @@ def get_conversation(
     """Return the paginated conversation between the current user and another user,
     sorted by timestamp ascending.  Defaults to the latest 50 messages."""
 
+    # Verify an accepted match exists between the two users
+    match = (
+        db.query(Match)
+        .filter(
+            or_(
+                (Match.user1_id == current_user.user_id) & (Match.user2_id == other_user_id),
+                (Match.user1_id == other_user_id) & (Match.user2_id == current_user.user_id),
+            ),
+            Match.status == "accepted",
+        )
+        .first()
+    )
+    if not match:
+        raise HTTPException(status_code=403, detail="No accepted match with this user")
+
     total_q = (
         db.query(Message)
         .filter(

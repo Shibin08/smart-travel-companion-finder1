@@ -143,7 +143,7 @@ export interface User {
 
 export interface TravelProfile {
     budget: 'Low' | 'Medium' | 'High';
-    travelStyle: 'Backpacking' | 'Luxury' | 'Standard' | 'Adventure';
+    travelStyle: 'Backpacking' | 'Luxury' | 'Standard' | 'Adventure' | 'Leisure' | 'Business';
     interests: string[]; // e.g., 'Nature', 'Food', 'History', 'Nightlife'
     personality?: 'Introvert' | 'Extrovert' | 'Ambivert';
     languagePreference?: string;
@@ -159,7 +159,7 @@ export interface Trip {
     destination: string;
     startDate: string; // ISO Date string
     endDate: string;   // ISO Date string
-    travelType: 'Leisure' | 'Business' | 'Backpacking' | 'Adventure';
+    travelType: 'Leisure' | 'Business' | 'Backpacking' | 'Adventure' | 'Standard' | 'Luxury';
     budget: 'Low' | 'Medium' | 'High';
     status: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
     description?: string;

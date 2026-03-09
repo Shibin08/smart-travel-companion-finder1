@@ -23,7 +23,7 @@ export default function CompanionCard({ match }: CompanionCardProps) {
 
   const budgetPill =
     matchDetails.budgetCompatibility === 'High'
-      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      ? 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'
       : matchDetails.budgetCompatibility === 'Medium'
         ? 'bg-amber-50 text-amber-700 border-amber-200'
         : 'bg-rose-50 text-rose-700 border-rose-200';
@@ -40,17 +40,17 @@ export default function CompanionCard({ match }: CompanionCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col h-full border border-gray-100 hover:border-teal-200">
+    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-md overflow-hidden flex flex-col h-full border border-gray-200/60 hover:border-violet-200/60 group card-hover-glow gradient-border">
       {/* Header with Image and Score */}
-      <div className="relative h-48">
+      <div className="relative h-48 overflow-hidden">
         <UserAvatar
           src={user.photoUrl}
           name={user.name}
-          className="w-full h-full text-5xl"
+          className="w-full h-full text-5xl group-hover:scale-105 transition-transform duration-500"
           aria-label={`Photo of ${user.name}`}
         />
         <div className="absolute top-2 right-2">
-          <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-semibold border ${scoreColor}`}>
+          <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold border backdrop-blur-md shadow-sm ${scoreColor}`}>
             <Star className="h-3 w-3 mr-1 fill-current" />
             {score}% Match
           </div>
@@ -101,17 +101,14 @@ export default function CompanionCard({ match }: CompanionCardProps) {
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
             {user.profile.travelStyle}
           </span>
-          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-200">
-            {user.profile.budget} Budget
-          </span>
           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${budgetPill}`}>
             <Wallet size={12} className="mr-1" />
-            Budget {matchDetails.budgetCompatibility}
+            {user.profile.budget} Budget
           </span>
         </div>
 
         {/* Compatibility Breakdown */}
-        <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+        <div className="mt-4 p-3.5 bg-gray-50/80 rounded-xl border border-gray-100/60">
           <h4 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
             <TrendingUp className="h-3 w-3 mr-1" />
             Compatibility Breakdown
@@ -185,17 +182,17 @@ export default function CompanionCard({ match }: CompanionCardProps) {
       </div>
 
       {/* Action Buttons */}
-      <div className="p-4 bg-gray-50 border-t border-gray-100 grid grid-cols-2 gap-3">
+      <div className="p-4 bg-gray-50/60 border-t border-gray-100/60 grid grid-cols-2 gap-3">
         <button
           onClick={() => navigate(`/match/${match.matchId}`)}
-          className="flex items-center justify-center px-4 py-2.5 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+          className="flex items-center justify-center px-4 py-2.5 border border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-violet-200 hover:-translate-y-0.5 transition-all duration-200"
         >
           View Profile
         </button>
         {match.matchStatus === 'Matched' ? (
           <button
             onClick={() => navigate(`/chat/${match.matchId}`)}
-            className="flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-teal-600 hover:bg-teal-700 transition-colors"
+            className="flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5 transition-all duration-200"
           >
             <MessageCircle size={16} className="mr-2" />
             Chat
@@ -209,10 +206,10 @@ export default function CompanionCard({ match }: CompanionCardProps) {
               setIsConnecting(false);
             }}
             disabled={!match.chatEnabled || isConnecting}
-            className={`flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-medium rounded-lg transition-colors ${
+            className={`flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl transition-all ${
               match.chatEnabled
-                ? 'text-white bg-teal-600 hover:bg-teal-700'
-                : 'text-gray-400 bg-gray-300 cursor-not-allowed'
+                ? 'text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5'
+                : 'text-gray-400 bg-gray-200 cursor-not-allowed'
             }`}
           >
             <MessageCircle size={16} className="mr-2" />

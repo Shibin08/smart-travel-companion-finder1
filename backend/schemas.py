@@ -73,9 +73,18 @@ class MatchResponse(BaseModel):
 
 
 class MatchUserInfo(BaseModel):
-    """Minimal user info embedded in match responses."""
+    """User info embedded in match responses."""
     user_id: str
     name: str
+    photo_url: Optional[str] = None
+    gender: Optional[str] = None
+    age: Optional[int] = None
+    travel_style: Optional[str] = None
+    interests: Optional[str] = None
+    budget_range: Optional[float] = None
+    home_country: Optional[str] = None
+    current_city: Optional[str] = None
+    bio: Optional[str] = None
 
 
 class MatchWithUserResponse(BaseModel):
@@ -129,10 +138,10 @@ class ConversationSummary(BaseModel):
 # ──────────────────────────────
 
 class ReviewCategories(BaseModel):
-    communication: float
-    reliability: float
-    compatibility: float
-    overall: float
+    communication: float = Field(..., ge=1, le=5)
+    reliability: float = Field(..., ge=1, le=5)
+    compatibility: float = Field(..., ge=1, le=5)
+    overall: float = Field(..., ge=1, le=5)
 
 
 class ReviewCreate(BaseModel):
@@ -145,8 +154,8 @@ class ReviewCreate(BaseModel):
 
 
 class ReviewUpdate(BaseModel):
-    rating: Optional[float] = None
-    comment: Optional[str] = None
+    rating: Optional[float] = Field(None, ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=2000)
     categories: Optional[ReviewCategories] = None
     is_public: Optional[bool] = None
 
@@ -181,14 +190,14 @@ class EmergencyLocation(BaseModel):
 
 
 class EmergencyAlertCreate(BaseModel):
-    alert_type: str
-    message: str
-    severity: str = "High"
+    alert_type: str = Field(..., pattern=r'^(SOS|Medical|Lost|Theft|Other)$')
+    message: str = Field(..., min_length=1, max_length=2000)
+    severity: str = Field("High", pattern=r'^(Low|Medium|High|Critical)$')
     location: EmergencyLocation
 
 
 class EmergencyAlertStatusUpdate(BaseModel):
-    status: str
+    status: str = Field(..., pattern=r'^(Active|Acknowledged|Resolved)$')
 
 
 class EmergencyAlertResponse(BaseModel):
@@ -214,18 +223,18 @@ class EmergencyAlertListResponse(BaseModel):
 # ──────────────────────────────
 
 class PlaceRequestCreate(BaseModel):
-    destination: str
-    place_image: str
-    pin_lat: float
-    pin_lng: float
-    pin_label: str
-    start_date: str
-    end_date: str
-    companions_needed: int
-    budget: str
-    travel_type: str
-    notes: str
-    status: str = "Open"
+    destination: str = Field(..., min_length=1, max_length=200)
+    place_image: str = Field("", max_length=500)
+    pin_lat: float = Field(..., ge=-90, le=90)
+    pin_lng: float = Field(..., ge=-180, le=180)
+    pin_label: str = Field(..., min_length=1, max_length=200)
+    start_date: str = Field(..., min_length=1)
+    end_date: str = Field(..., min_length=1)
+    companions_needed: int = Field(..., ge=1, le=20)
+    budget: str = Field(..., pattern=r'^(Low|Medium|High)$')
+    travel_type: str = Field(..., min_length=1, max_length=50)
+    notes: str = Field(..., min_length=15, max_length=2000)
+    status: str = Field("Open", pattern=r'^(Open|In Progress|Closed)$')
 
 
 class PlaceRequestResponse(BaseModel):
@@ -251,6 +260,12 @@ class PlaceRequestResponse(BaseModel):
 class PlaceRequestListResponse(BaseModel):
     total: int
     requests: list[PlaceRequestResponse]
+
+
+class JoinPlaceRequestResponse(BaseModel):
+    message: str
+    poster_user_id: str
+    request_id: int
 
 # ──────────────────────────────
 # Profile Update schemas

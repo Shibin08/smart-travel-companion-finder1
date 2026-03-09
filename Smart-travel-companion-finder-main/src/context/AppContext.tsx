@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useCallback, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { ChatMessage, Match, MatchSummary, PlaceRequest, Review, Trip } from '../types';
 import { useAuth } from './AuthContext';
@@ -9,6 +9,7 @@ import { runAdvancedMatchingPipeline, validateTripInput } from '../utils/advance
 import {
     acceptMatch,
     createPlaceRequest,
+    createReview,
     fetchConversation,
     fetchMatches,
     fetchPlaceRequests,
@@ -37,6 +38,7 @@ interface AppContextType {
     getReviewByMatch: (matchId: string) => Review | undefined;
     placeRequests: PlaceRequest[];
     addPlaceRequest: (request: Omit<PlaceRequest, 'requestId' | 'createdAt'>) => boolean;
+    refreshPlaceRequests: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -49,40 +51,73 @@ const normalizeBudget = (score: number): Trip['budget'] => {
     return 'Low';
 };
 
-const scoreToMatchStatus = (score: number): Match['matchStatus'] => {
-    if (score >= 80) return 'Matched';
-    if (score >= 55) return 'Recommended';
-    return 'Pending';
+const scoreToMatchStatus = (_score: number): Match['matchStatus'] => {
+    return 'Recommended';
 };
 
-const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: string, gender?: string): Match['user'] => ({
-    userId: id,
-    name,
-    email: `${id.toLowerCase()}@example.com`,
-    age: 27,
-    gender: gender || 'Other',
-    photoUrl: photoUrl || undefined,
-    verificationStatus: 'Pending',
-    bio: 'Companion profile from backend recommendation.',
-    homeCountry: 'India',
-    currentCity: 'Unknown',
-    profile: {
-        budget: normalizeBudget(score),
-        travelStyle: 'Standard',
-        interests: ['Travel'],
-    },
-    preferences: {
-        notifications: true,
-        locationSharing: false,
-        publicProfile: true,
-    },
-    stats: {
-        tripsCompleted: 0,
-        reviewsReceived: 0,
-        averageRating: 0,
-        responseRate: 0,
-    },
-});
+const normalizeGender = (gender?: string): Match['user']['gender'] => {
+    if (gender === 'Male' || gender === 'Female' || gender === 'Non-Binary' || gender === 'Other') {
+        return gender;
+    }
+    return 'Other';
+};
+
+interface BackendUserExtra {
+    age?: number;
+    travel_style?: string;
+    interests?: string;
+    budget_range?: number;
+    home_country?: string;
+    current_city?: string;
+    bio?: string;
+}
+
+const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: string, gender?: string, extra?: BackendUserExtra): Match['user'] => {
+    // Parse interests from pipe-delimited string
+    const interestsList = extra?.interests
+        ? extra.interests.split(/[|,]/).map(s => s.trim()).filter(Boolean)
+        : ['Travel'];
+
+    // Map travel_style from backend or fall back to 'Standard'
+    const travelStyle = (extra?.travel_style as Match['user']['profile']['travelStyle']) || 'Standard';
+
+    // Map budget_range float to budget label
+    const budgetFromRange = (val?: number): Trip['budget'] => {
+        if (!val) return normalizeBudget(score);
+        if (val >= 9000) return 'High';
+        if (val >= 7000) return 'Medium';
+        return 'Low';
+    };
+
+    return {
+        userId: id,
+        name,
+        email: '',
+        age: extra?.age ?? 27,
+        gender: normalizeGender(gender),
+        photoUrl: photoUrl || undefined,
+        verificationStatus: 'Pending',
+        bio: extra?.bio || 'Travel companion profile.',
+        homeCountry: extra?.home_country || 'India',
+        currentCity: extra?.current_city || 'Unknown',
+        profile: {
+            budget: budgetFromRange(extra?.budget_range),
+            travelStyle: travelStyle,
+            interests: interestsList,
+        },
+        preferences: {
+            notifications: true,
+            locationSharing: false,
+            publicProfile: true,
+        },
+        stats: {
+            tripsCompleted: 0,
+            reviewsReceived: 0,
+            averageRating: 0,
+            responseRate: 0,
+        },
+    };
+};
 
 const mapBackendScore = (rawScore: number): number => {
     if (Number.isNaN(rawScore) || rawScore < 0) return 0;
@@ -103,25 +138,12 @@ const mapUiStatusToBackend = (status: Match['matchStatus']): BackendMatchRecord[
     return 'pending';
 };
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim() || 'http://127.0.0.1:8000';
-
 import { resolvePhoto as resolvePhotoUrl } from '../utils/photoUtils';
 import { devLog, devError } from '../utils/devLogger';
 
-const resolveUserFromBackend = (backendUserId: string, backendName: string, score: number, photoUrl?: string, gender?: string): Match['user'] => {
+const resolveUserFromBackend = (backendUserId: string, backendName: string, score: number, photoUrl?: string, gender?: string, extra?: BackendUserExtra): Match['user'] => {
     const fullPhotoUrl = resolvePhotoUrl(photoUrl);
-    const existingUser = mockUsers.find((candidate) => candidate.userId.toLowerCase() === backendUserId.toLowerCase())
-        ?? mockUsers.find((candidate) => candidate.name.toLowerCase() === backendName.toLowerCase());
-
-    if (existingUser) {
-        // Override photoUrl from backend if available
-        if (fullPhotoUrl) {
-            return { ...existingUser, photoUrl: fullPhotoUrl };
-        }
-        return existingUser;
-    }
-
-    return buildFallbackUser(backendUserId, backendName, score, fullPhotoUrl, gender);
+    return buildFallbackUser(backendUserId, backendName, score, fullPhotoUrl, gender, extra);
 };
 
 const mapBackendMessage = (matchId: string, raw: { message_id: number; sender_id: string; message_text: string; timestamp: string }): ChatMessage => ({
@@ -147,46 +169,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [messagesByMatch, setMessagesByMatch] = useState<Record<string, ChatMessage[]>>({});
     const [backendMatchIdByLocalId, setBackendMatchIdByLocalId] = useState<Record<string, number>>({});
     const [reviews, setReviews] = useState<Review[]>([]);
-    const [placeRequests, setPlaceRequests] = useState<PlaceRequest[]>([
-        {
-            requestId: 'pr-1',
-            userId: 'u5',
-            userName: 'Priya Patel',
-            destination: 'Kerala',
-            placeImage: 'https://images.unsplash.com/photo-1602216056096-3b40cc0c9944?auto=format&fit=crop&q=80&w=900',
-            pinLat: 10.1632,
-            pinLng: 76.6413,
-            pinLabel: 'Kerala',
-            startDate: '2026-03-10',
-            endDate: '2026-03-15',
-            companionsNeeded: 2,
-            budget: 'Medium',
-            travelType: 'Leisure',
-            notes: 'Looking for easy-going travelers for nature and café hopping.',
-            createdAt: new Date().toISOString(),
-            status: 'Open',
-            applicants: [],
-        },
-        {
-            requestId: 'pr-2',
-            userId: 'u2',
-            userName: 'Mike Ross',
-            destination: 'Ladakh',
-            placeImage: 'https://images.unsplash.com/photo-1482164565953-04b62dc3dfdf?auto=format&fit=crop&q=80&w=900',
-            pinLat: 34.1526,
-            pinLng: 77.5771,
-            pinLabel: 'Ladakh',
-            startDate: '2026-04-02',
-            endDate: '2026-04-08',
-            companionsNeeded: 3,
-            budget: 'Medium',
-            travelType: 'Adventure',
-            notes: 'Road trip + trekking. Need active buddies comfortable with altitude.',
-            createdAt: new Date().toISOString(),
-            status: 'Open',
-            applicants: [],
-        },
-    ]);
+    const [placeRequests, setPlaceRequests] = useState<PlaceRequest[]>([]);
 
     const createTrip = (trip: Trip): boolean => {
         const errors = validateTripInput(trip);
@@ -202,7 +185,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     const mapBackendRecordToMatch = (record: BackendMatchRecord, tripId: string): Match => {
         const score = mapBackendScore(record.compatibility_score);
-        const resolvedUser = resolveUserFromBackend(record.other_user.user_id, record.other_user.name, score);
+        const ou = record.other_user;
+        const resolvedUser = resolveUserFromBackend(ou.user_id, ou.name, score, ou.photo_url, ou.gender, {
+            age: ou.age,
+            travel_style: ou.travel_style,
+            interests: ou.interests,
+            budget_range: ou.budget_range,
+            home_country: ou.home_country,
+            current_city: ou.current_city,
+            bio: ou.bio,
+        });
         const status = mapBackendStatusToUi(record.status);
 
         return {
@@ -377,7 +369,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     const mappedMatches: Match[] = backend.matches.map((item) => {
                         const score = mapBackendScore(item.compatibility_score);
                         const existingBackendMatch = backendByOtherUserId.get(item.user_id.toLowerCase());
-                        const resolvedUser = resolveUserFromBackend(item.user_id, item.name, score, item.photo_url, item.gender);
+                        const resolvedUser = resolveUserFromBackend(item.user_id, item.name, score, item.photo_url, item.gender, {
+                            age: item.age,
+                            travel_style: item.travel_style,
+                            interests: item.interests,
+                            budget_range: item.budget_range,
+                            home_country: item.home_country,
+                            current_city: item.current_city,
+                            bio: item.bio,
+                        });
                         const matchId = `api-${item.user_id}`;
                         const resolvedStatus = existingBackendMatch
                             ? mapBackendStatusToUi(existingBackendMatch.status)
@@ -395,16 +395,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
                             compatibilityScore: {
                                 overall: score,
                                 components: {
-                                    interestSimilarity: score / 100,
-                                    budgetCompatibility: score / 100,
-                                    travelStyleMatch: score / 100,
-                                    personalityMatch: score / 100,
-                                    scheduleOverlap: score / 100,
-                                    locationProximity: score / 100,
+                                    interestSimilarity: item.score_breakdown?.interests ?? score / 100,
+                                    budgetCompatibility: item.score_breakdown?.budget ?? score / 100,
+                                    travelStyleMatch: item.score_breakdown?.travel_style ?? score / 100,
+                                    personalityMatch: item.score_breakdown?.age ?? score / 100,
+                                    scheduleOverlap: item.score_breakdown?.dates ?? score / 100,
+                                    locationProximity: item.score_breakdown?.destination ?? score / 100,
                                     verificationBonus: resolvedUser.verificationStatus === 'Verified' ? 0.1 : 0,
                                 },
-                                strengths: score >= 75 ? ['High backend compatibility score'] : [],
-                                concerns: score < 55 ? ['Low compatibility score from backend'] : [],
+                                strengths: score >= 75 ? ['High compatibility score'] : [],
+                                concerns: score < 55 ? ['Low compatibility score'] : [],
                                 recommendations: ['Check itinerary details before confirming match'],
                             },
                             matchDetails: {
@@ -423,25 +423,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
                     });
 
                     const existingMap = new Map(mappedMatches.map((item) => [item.matchId, item]));
+                    // Merge backend matches: enrich recommendations already in the
+                    // list AND re-add accepted/pending matches that the recommendation
+                    // endpoint excluded (so they appear under "Connected"/"Pending").
                     backendMatchState.matches.forEach((record) => {
                         const localId = `api-${record.other_user.user_id}`;
+                        nextBackendIdByLocalId[localId] = record.match_id;
+
                         if (!existingMap.has(localId)) {
+                            // This is an accepted/pending match not in recommendations — add it
                             existingMap.set(localId, mapBackendRecordToMatch(record, tripToMatch.tripId));
                         }
-                        nextBackendIdByLocalId[localId] = record.match_id;
                     });
 
                     const mergedMatches = Array.from(existingMap.values());
 
                     setMatches(mergedMatches);
                     setBackendMatchIdByLocalId((prev) => ({ ...prev, ...nextBackendIdByLocalId }));
+                    const onlyRecommended = mergedMatches.filter((match) => match.matchStatus === 'Recommended');
                     setMatchSummary({
-                        totalCandidates: mergedMatches.length,
-                        eligibleAfterFiltering: mergedMatches.length,
-                        recommended: mergedMatches.filter((match) => match.matchStatus === 'Recommended').length,
+                        totalCandidates: onlyRecommended.length,
+                        eligibleAfterFiltering: onlyRecommended.length,
+                        recommended: onlyRecommended.length,
                         matched: mergedMatches.filter((match) => match.matchStatus === 'Matched').length,
-                        averageScore: mergedMatches.length > 0
-                            ? Math.round(mergedMatches.reduce((sum, match) => sum + match.score, 0) / mergedMatches.length)
+                        averageScore: onlyRecommended.length > 0
+                            ? Math.round(onlyRecommended.reduce((sum, match) => sum + match.score, 0) / onlyRecommended.length)
                             : 0,
                         generatedAt: new Date().toISOString(),
                         filters: {
@@ -463,7 +469,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
                         window.location.reload();
                         return;
                     } else {
-                        setMatchError(`Could not fetch companions from server: ${errMsg}. Please check if the backend is running and try again.`);
+                        setMatchError(`Could not fetch companions from server: ${errMsg}. Showing local recommendations.`);
+                        runLocalMatching();
+                        return;
                     }
                     setMatches([]);
                     setMatchSummary(null);
@@ -614,29 +622,78 @@ export function AppProvider({ children }: { children: ReactNode }) {
             return;
         }
 
-        setReviews((prev) => [
-            ...prev,
-            {
-                reviewId: `r-${matchId}-${reviewerId}`,
-                matchId,
-                reviewerId,
-                revieweeId,
+        // Optimistic local update
+        const localReview = {
+            reviewId: `r-${matchId}-${reviewerId}`,
+            matchId,
+            reviewerId,
+            revieweeId,
+            categories: {
+                communication: rating,
+                reliability: rating,
+                compatibility: rating,
+                overall: rating,
+            },
+            isPublic: true,
+            rating,
+            comment,
+            createdAt: new Date().toISOString(),
+            helpfulVotes: 0,
+        };
+        setReviews((prev) => [...prev, localReview]);
+
+        // Persist to backend
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (token && revieweeId !== reviewerId) {
+            const backendMatchId = backendMatchIdByLocalId[matchId];
+            void createReview(token, {
+                reviewee_id: revieweeId,
+                match_id: backendMatchId ?? undefined,
+                rating,
+                comment,
                 categories: {
                     communication: rating,
                     reliability: rating,
                     compatibility: rating,
                     overall: rating,
                 },
-                isPublic: true,
-                rating,
-                comment,
-                createdAt: new Date().toISOString(),
-                helpfulVotes: 0,
-            },
-        ]);
+                is_public: true,
+            }).catch(() => {
+                // Keep optimistic review on failure
+            });
+        }
     };
 
     const getReviewByMatch = (matchId: string) => reviews.find((review) => review.matchId === matchId);
+
+    const refreshPlaceRequests = async () => {
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (!token || !user) return;
+        try {
+            const response = await fetchPlaceRequests(token);
+            setPlaceRequests(
+                response.requests.map((item) => ({
+                    requestId: String(item.request_id),
+                    userId: item.user_id,
+                    userName: item.user_name,
+                    destination: item.destination,
+                    placeImage: item.place_image,
+                    pinLat: item.pin_lat,
+                    pinLng: item.pin_lng,
+                    pinLabel: item.pin_label,
+                    startDate: item.start_date,
+                    endDate: item.end_date,
+                    companionsNeeded: item.companions_needed,
+                    budget: item.budget as Trip['budget'],
+                    travelType: item.travel_type as Trip['travelType'],
+                    notes: item.notes,
+                    createdAt: item.created_at,
+                    status: item.status as PlaceRequest['status'],
+                    applicants: item.applicants,
+                })),
+            );
+        } catch { /* keep existing data */ }
+    };
 
     const addPlaceRequest = (request: Omit<PlaceRequest, 'requestId' | 'createdAt'>): boolean => {
         if (!request.destination.trim() || !request.notes.trim() || request.companionsNeeded < 1) {
@@ -720,6 +777,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         getReviewByMatch,
         placeRequests,
         addPlaceRequest,
+        refreshPlaceRequests,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }), [currentTrip, matches, isMatching, matchError, matchSummary, validationErrors, placeRequests, messagesByMatch, reviews, backendMatchIdByLocalId, user]);
 

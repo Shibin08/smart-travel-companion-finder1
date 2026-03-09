@@ -1,27 +1,16 @@
-"""
-Photo utilities for user profiles with gender-based default assignments.
-"""
+"""Photo utilities for user profile images."""
 
-import base64
-import os
 from pathlib import Path
-
-# Default profile photos by gender (using Unsplash URLs)
-DEFAULT_PHOTOS = {
-    "Male": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250&h=250",
-    "Female": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=250&h=250",
-    "Non-Binary": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250&h=250",
-    "Other": "https://images.unsplash.com/photo-1502134249126-9f3755a50d78?auto=format&fit=crop&q=80&w=250&h=250",
-}
 
 # Get the backend directory
 BACKEND_DIR = Path(__file__).parent
 UPLOADS_DIR = BACKEND_DIR / "uploads"
+DEFAULT_PHOTO_PATH = "/uploads/default-avatar.svg"
 
 
 def get_default_photo(gender: str = "Other") -> str:
-    """Get default photo URL based on gender."""
-    return DEFAULT_PHOTOS.get(gender, DEFAULT_PHOTOS["Other"])
+    """Return a neutral default avatar path for all users."""
+    return DEFAULT_PHOTO_PATH
 
 
 def save_photo_file(file_content: bytes, user_id: str, file_ext: str = "jpg") -> str:
@@ -59,7 +48,11 @@ def delete_old_photo(photo_url: str) -> None:
     """
     Delete old photo file if it exists and is a local file.
     """
-    if not photo_url or photo_url.startswith("http"):
+    if (
+        not photo_url
+        or photo_url.startswith("http")
+        or photo_url == DEFAULT_PHOTO_PATH
+    ):
         return  # Don't delete external URLs (Unsplash, etc.)
     
     try:

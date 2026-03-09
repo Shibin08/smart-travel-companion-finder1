@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" role="img" aria-label="Default trip image">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#dbe7ff"/>
+      <stop offset="100%" stop-color="#f4f8ff"/>
+    </linearGradient>
+    <linearGradient id="hillA" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#64748b"/>
+    </linearGradient>
+    <linearGradient id="hillB" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#64748b"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="700" fill="url(#bg)"/>
+  <circle cx="920" cy="140" r="52" fill="#fbbf24" opacity="0.9"/>
+
+  <path d="M0 470L160 360L280 440L450 290L620 430L760 330L930 450L1200 300V700H0Z" fill="url(#hillA)"/>
+  <path d="M0 540L180 460L360 530L520 420L720 560L900 470L1080 540L1200 500V700H0Z" fill="url(#hillB)"/>
+
+  <path d="M160 620C220 560 320 560 380 620" stroke="#e2e8f0" stroke-width="12" fill="none" stroke-linecap="round"/>
+  <path d="M740 640C810 570 930 570 1000 640" stroke="#e2e8f0" stroke-width="12" fill="none" stroke-linecap="round"/>
+
+  <g transform="translate(530 228)">
+    <circle cx="70" cy="70" r="70" fill="#ffffff" opacity="0.95"/>
+    <path d="M70 18C43 18 21 40 21 67c0 39 49 92 49 92s49-53 49-92c0-27-22-49-49-49Z" fill="#7c3aed"/>
+    <circle cx="70" cy="67" r="18" fill="#ffffff"/>
+  </g>
+</svg>

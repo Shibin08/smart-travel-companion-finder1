@@ -328,7 +328,7 @@ const rawUsers: RawUser[] = [
         age: 30,
         gender: 'Female',
         verificationStatus: 'Verified',
-        bio: 'Remote worker balancing cafés and coastal sunsets.',
+        bio: 'Remote worker balancing cafes and coastal sunsets.',
         photoUrl: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?auto=format&fit=crop&q=80&w=200',
         homeCountry: 'France',
         currentCity: 'Pondicherry',
@@ -344,6 +344,8 @@ const rawUsers: RawUser[] = [
 
 export const mockUsers: User[] = rawUsers.map((user) => ({
     ...user,
+    // Use one neutral avatar for all mock profiles to avoid real-person photos.
+    photoUrl: '/default-avatar.svg',
     preferences: user.preferences ?? { ...defaultPreferences },
     stats: user.stats ?? { ...defaultStats },
 }));
@@ -358,6 +360,7 @@ export const currentUserMock: User = {
     gender: 'Male',
     verificationStatus: 'Verified',
     bio: 'Starting a new journey. Looking for a buddy.',
+    photoUrl: '/default-avatar.svg',
     homeCountry: 'India',
     currentCity: 'Bengaluru',
     emergencyContacts: [

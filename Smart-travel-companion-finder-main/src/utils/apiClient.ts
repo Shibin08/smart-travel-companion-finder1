@@ -14,12 +14,29 @@ export interface BackendRegisterResponse {
   created_at: string;
 }
 
+export interface BackendScoreBreakdown {
+  destination: number;
+  dates: number;
+  budget: number;
+  interests: number;
+  travel_style: number;
+  age: number;
+}
+
 export interface BackendRecommendMatch {
   user_id: string;
   name: string;
   compatibility_score: number;
+  score_breakdown?: BackendScoreBreakdown;
   photo_url?: string;
   gender?: string;
+  age?: number;
+  travel_style?: string;
+  interests?: string;
+  budget_range?: number;
+  home_country?: string;
+  current_city?: string;
+  bio?: string;
 }
 
 export interface BackendRecommendResponse {
@@ -30,6 +47,15 @@ export interface BackendRecommendResponse {
 export interface BackendMatchedUser {
   user_id: string;
   name: string;
+  photo_url?: string;
+  gender?: string;
+  age?: number;
+  travel_style?: string;
+  interests?: string;
+  budget_range?: number;
+  home_country?: string;
+  current_city?: string;
+  bio?: string;
 }
 
 export interface BackendMatchRecord {
@@ -197,6 +223,34 @@ export async function loginWithBackend(email: string, password: string): Promise
   return result;
 }
 
+export async function googleLoginWithBackend(credential: string): Promise<BackendLoginResponse> {
+  devLog('[googleLoginWithBackend] Sending Google credential to backend');
+
+  const response = await fetch(buildUrl('/auth/google'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ credential }),
+  });
+
+  devLog('[googleLoginWithBackend] Response status:', response.status);
+
+  if (!response.ok) {
+    let errorMsg = 'Google sign-in failed';
+    try {
+      const error = await response.json();
+      errorMsg = error.detail || error.message || 'Google sign-in failed';
+      devError('[googleLoginWithBackend] Backend error:', error);
+    } catch {
+      devError('[googleLoginWithBackend] Could not parse error response');
+    }
+    throw new Error(errorMsg);
+  }
+
+  const result = await response.json() as BackendLoginResponse;
+  devLog('[googleLoginWithBackend] Success');
+  return result;
+}
+
 export async function registerWithBackend(email: string, password: string, name: string, gender: string = 'Other'): Promise<BackendRegisterResponse> {
   devLog('[registerWithBackend] Registering:', email);
   
@@ -360,6 +414,13 @@ export interface BackendUserPublicProfile {
   name: string;
   photo_url: string | null;
   gender: string;
+  age?: number;
+  travel_style?: string;
+  interests?: string;
+  budget_range?: number;
+  home_country?: string;
+  current_city?: string;
+  bio?: string;
 }
 
 export async function fetchUserPublicProfile(userId: string): Promise<BackendUserPublicProfile> {
@@ -409,6 +470,27 @@ export async function fetchPlaceRequests(token: string): Promise<BackendPlaceReq
   return (await response.json()) as BackendPlaceRequestList;
 }
 
+export interface CommunityDestination {
+  name: string;
+  image: string;
+  properties: string[];
+}
+
+export async function fetchCommunityDestinations(token: string): Promise<CommunityDestination[]> {
+  const response = await authFetch(buildUrl('/place-requests/destinations'), {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    return [];
+  }
+
+  return (await response.json()) as CommunityDestination[];
+}
+
 export async function createPlaceRequest(
   token: string,
   payload: Omit<BackendPlaceRequest, 'request_id' | 'user_id' | 'user_name' | 'applicants' | 'created_at'>,
@@ -427,6 +509,33 @@ export async function createPlaceRequest(
   }
 
   return (await response.json()) as BackendPlaceRequest;
+}
+
+export interface JoinPlaceRequestResponse {
+  message: string;
+  poster_user_id: string;
+  request_id: number;
+}
+
+export async function joinPlaceRequest(token: string, requestId: number): Promise<JoinPlaceRequestResponse> {
+  const response = await authFetch(buildUrl(`/place-requests/${requestId}/join`), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    let detail = 'Failed to join trip';
+    try {
+      const errBody = await response.json();
+      detail = errBody.detail || detail;
+    } catch { /* ignore */ }
+    throw new Error(detail);
+  }
+
+  return (await response.json()) as JoinPlaceRequestResponse;
 }
 
 export async function fetchMyEmergencyAlerts(token: string): Promise<BackendEmergencyAlertList> {

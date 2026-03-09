@@ -15,6 +15,7 @@ GET  /chat/{id}                   - Get conversation history (protected)
 """
 
 import os
+import logging
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, UploadFile, File
@@ -27,6 +28,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
 from auth import create_access_token, get_current_user, hash_password, verify_password
+from config import GOOGLE_CLIENT_ID
 from database import Base, engine, get_db
 from matching import find_matches, get_user_matches, store_match, update_match_status
 from models import User
@@ -40,6 +42,8 @@ from schemas import MatchListResponse, MatchResponse, MatchWithUserResponse, Upd
 # Only auto-create tables in development mode
 if os.getenv("ENV") == "development":
     Base.metadata.create_all(bind=engine)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Smart Travel Companion Finder API",
@@ -68,7 +72,7 @@ uploads_dir.mkdir(exist_ok=True)
 try:
     app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
 except Exception as e:
-    print(f"Warning: Could not mount uploads directory: {e}")
+    logger.warning("Could not mount uploads directory: %s", e)
 
 app.include_router(chat_router)
 app.include_router(reviews_router)
@@ -80,12 +84,29 @@ app.include_router(place_requests_router)
 # Response Models
 # ----------------------------
 
+class ScoreBreakdown(BaseModel):
+    destination: float = 0.0
+    dates: float = 0.0
+    budget: float = 0.0
+    interests: float = 0.0
+    travel_style: float = 0.0
+    age: float = 0.0
+
+
 class RecommendMatchItem(BaseModel):
     user_id: str
     name: str
     compatibility_score: float
+    score_breakdown: Optional[ScoreBreakdown] = None
     photo_url: Optional[str] = None
     gender: Optional[str] = None
+    age: Optional[int] = None
+    travel_style: Optional[str] = None
+    interests: Optional[str] = None
+    budget_range: Optional[float] = None
+    home_country: Optional[str] = None
+    current_city: Optional[str] = None
+    bio: Optional[str] = None
 
 
 class RecommendResponse(BaseModel):
@@ -102,9 +123,10 @@ class TripSearchParams(BaseModel):
     travel_style: Optional[str] = None
 
 
+
 class AcceptMatchRequest(BaseModel):
     matched_user_id: str = Field(..., example="U042")
-    compatibility_score: float = Field(..., example=78.5)
+    compatibility_score: float = Field(..., ge=0, le=100, example=78.5)
 
 
 class UpdateMatchStatusRequest(BaseModel):
@@ -137,7 +159,14 @@ def get_user_public_profile(
         "user_id": db_user.user_id,
         "name": db_user.name,
         "photo_url": db_user.photo_url,
-        "gender": db_user.gender,
+        "gender": db_user.gender or "Other",
+        "age": db_user.age,
+        "travel_style": db_user.travel_style,
+        "interests": db_user.interests,
+        "budget_range": db_user.budget_range,
+        "home_country": db_user.home_country,
+        "current_city": db_user.current_city,
+        "bio": db_user.bio,
     }
 
 
@@ -215,6 +244,63 @@ def login(
     return {"access_token": access_token, "token_type": "bearer"}
 
 
+class GoogleTokenPayload(BaseModel):
+    credential: str
+
+
+@app.post("/auth/google")
+@limiter.limit("10/minute")
+def google_auth(request: Request, payload: GoogleTokenPayload, db: Session = Depends(get_db)):
+    """Verify a Google ID token, create the user if new, and return a JWT."""
+
+    if not GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=501, detail="Google Sign-In is not configured on the server")
+
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+    import secrets
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            payload.credential,
+            google_requests.Request(),
+            GOOGLE_CLIENT_ID,
+        )
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    email: str = idinfo.get("email", "")
+    name: str = idinfo.get("name", "")
+    picture: str = idinfo.get("picture", "")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email")
+
+    # Look for existing user by email
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        # Auto-register
+        user_id = email.split("@")[0] + "_" + secrets.token_hex(4)
+        default_photo = picture or get_default_photo("Other")
+
+        user = User(
+            user_id=user_id,
+            name=name or email.split("@")[0],
+            email=email,
+            hashed_password=hash_password(secrets.token_urlsafe(32)),  # random password
+            gender="Other",
+            photo_url=default_photo,
+            discoverable=True,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token(data={"sub": user.user_id})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
 # ----------------------------
 # Recommendation Endpoint (protected)
 # ----------------------------
@@ -236,21 +322,40 @@ def recommend(
         if body.destination:
             trip_override["destination"] = body.destination
         if body.start_date:
-            from datetime import datetime as _dt
+            from datetime import datetime as _dt, date as _date
             try:
-                trip_override["start_date"] = _dt.fromisoformat(body.start_date)
+                parsed_start = _dt.fromisoformat(body.start_date)
+                if parsed_start.date() < _date.today():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Start date cannot be in the past. Please select today or a future date."
+                    )
+                trip_override["start_date"] = parsed_start
             except ValueError:
-                pass
+                raise HTTPException(status_code=400, detail="Invalid start date format.")
         if body.end_date:
-            from datetime import datetime as _dt
+            from datetime import datetime as _dt, date as _date
             try:
-                trip_override["end_date"] = _dt.fromisoformat(body.end_date)
+                parsed_end = _dt.fromisoformat(body.end_date)
+                if parsed_end.date() < _date.today():
+                    raise HTTPException(
+                        status_code=400,
+                        detail="End date cannot be in the past. Please select today or a future date."
+                    )
+                trip_override["end_date"] = parsed_end
             except ValueError:
-                pass
+                raise HTTPException(status_code=400, detail="Invalid end date format.")
         if body.budget:
             trip_override["budget_range"] = body.budget
         if body.travel_style:
             trip_override["travel_style"] = body.travel_style
+        # Cross-field validation: end_date must not be before start_date
+        if "start_date" in trip_override and "end_date" in trip_override:
+            if trip_override["end_date"] < trip_override["start_date"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail="End date cannot be before start date."
+                )
 
     matches = find_matches(current_user, db, trip_override=trip_override)
 
@@ -335,7 +440,10 @@ def change_match_status(
             current_user_id=current_user.user_id,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        msg = str(exc)
+        if "not part of this match" in msg:
+            raise HTTPException(status_code=403, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
 
     return match
 
@@ -355,9 +463,9 @@ def update_profile(
         raise HTTPException(status_code=404, detail="User not found")
 
     # Update fields if provided
-    if update_data.name:
+    if update_data.name is not None:
         user.name = update_data.name
-    if update_data.gender:
+    if update_data.gender is not None:
         user.gender = update_data.gender
     if update_data.age is not None:
         user.age = update_data.age
@@ -370,9 +478,28 @@ def update_profile(
     if update_data.destination is not None:
         user.destination = update_data.destination
     if update_data.start_date is not None:
+        from datetime import datetime as _dt, date as _date
+        try:
+            parsed = _dt.fromisoformat(str(update_data.start_date))
+            if parsed.date() < _date.today():
+                raise HTTPException(status_code=400, detail="Start date cannot be in the past.")
+        except (ValueError, TypeError):
+            pass
         user.start_date = update_data.start_date
     if update_data.end_date is not None:
+        from datetime import datetime as _dt, date as _date
+        try:
+            parsed = _dt.fromisoformat(str(update_data.end_date))
+            if parsed.date() < _date.today():
+                raise HTTPException(status_code=400, detail="End date cannot be in the past.")
+        except (ValueError, TypeError):
+            pass
         user.end_date = update_data.end_date
+
+    # Cross-field: end_date must not be before start_date
+    if user.start_date and user.end_date and user.end_date < user.start_date:
+        raise HTTPException(status_code=400, detail="End date cannot be before start date.")
+
     if update_data.budget_range is not None:
         user.budget_range = update_data.budget_range
     if update_data.interests is not None:
@@ -443,7 +570,7 @@ async def upload_photo(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Upload error: {str(e)}", exc_info=True)
+        logger.exception("Upload error for user_id=%s", current_user.user_id)
         raise HTTPException(status_code=500, detail=f"Failed to upload photo: {str(e)}")
 
 

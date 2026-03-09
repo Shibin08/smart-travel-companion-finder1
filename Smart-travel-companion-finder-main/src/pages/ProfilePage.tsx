@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Globe, MapPin, Save, User as UserIcon, Upload, Trash2, Loader2, Lock } from 'lucide-react';
+import { Globe, MapPin, Save, User as UserIcon, Upload, Trash2, Loader2, Lock, Plane, Compass } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { uploadProfilePhoto, changePassword } from '../utils/apiClient';
 import type { TravelProfile, User } from '../types';
@@ -25,7 +25,7 @@ const INTEREST_OPTIONS = [
 export default function ProfilePage() {
   const { user, updateProfile } = useAuth();
 
-  useEffect(() => { document.title = 'My Profile — Travel Companion Finder'; }, []);
+  useEffect(() => { document.title = 'My Profile - TravelMatch'; }, []);
   const [activeTab, setActiveTab] = useState<'basic' | 'travel' | 'interests'>('basic');
   const [savedMessage, setSavedMessage] = useState('');
   const [photoUrl, setPhotoUrl] = useState<string | undefined>(resolvePhoto(user?.photoUrl));
@@ -175,21 +175,33 @@ export default function ProfilePage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 px-6 py-5 text-white flex items-center justify-between">
-        <h1 className="text-xl font-semibold inline-flex items-center">
-          <UserIcon className="mr-2 h-5 w-5" /> Profile Setup
-        </h1>
-        <p className="text-sm text-teal-100">Profile completeness: {completion}%</p>
-      </div>
-
-      <div className="px-6 pt-4">
-        <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-          <div className="h-full bg-teal-500" style={{ width: `${completion}%` }} />
+    <div className="max-w-4xl mx-auto bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 shadow-lg shadow-gray-200/40 overflow-hidden animate-slide-up">
+      <div className="relative bg-gradient-to-r from-cyan-700 via-sky-700 to-teal-700 px-6 py-7 text-white overflow-hidden">
+        {/* Floating decorative icons */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <Plane className="absolute top-3 right-[12%] h-6 w-6 text-white/10 animate-float rotate-[-15deg]" />
+          <Compass className="absolute bottom-3 left-[15%] h-7 w-7 text-white/10 animate-float-delayed" />
+          <Globe className="absolute top-5 left-[60%] h-5 w-5 text-white/10 animate-float-slow" />
+        </div>
+        <div className="relative z-10 flex items-center justify-between">
+          <h1 className="text-xl font-bold inline-flex items-center">
+            <div className="p-2 bg-white/15 rounded-xl mr-2.5 backdrop-blur-sm"><UserIcon className="h-5 w-5" /></div>
+            Profile Setup
+          </h1>
+          <div className="text-right">
+            <p className="text-xs text-cyan-100 font-medium">Profile completeness</p>
+            <p className="text-2xl font-bold">{completion}%</p>
+          </div>
         </div>
       </div>
 
-      <div className="border-b border-gray-200 mt-4 flex">
+      <div className="px-6 pt-5">
+        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+          <div className="h-full bg-gradient-to-r from-cyan-500 via-sky-500 to-teal-400 transition-all duration-700 ease-out shadow-sm" style={{ width: `${completion}%` }} />
+        </div>
+      </div>
+
+      <div className="border-b border-gray-200/60 mt-5 flex px-6">
         {[
           { id: 'basic', label: 'Basic Info' },
           { id: 'travel', label: 'Travel Preferences' },
@@ -198,7 +210,7 @@ export default function ProfilePage() {
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id as 'basic' | 'travel' | 'interests')}
-            className={`flex-1 py-3 text-sm font-medium ${activeTab === tab.id ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}
+            className={`flex-1 py-3.5 text-sm font-medium transition-all duration-200 ${activeTab === tab.id ? 'text-cyan-600 border-b-2 border-cyan-600' : 'text-gray-400 hover:text-gray-600'}`}
           >
             {tab.label}
           </button>
@@ -210,7 +222,7 @@ export default function ProfilePage() {
           <div className="space-y-4">
             {/* Photo Upload Section */}
             <div className="flex flex-col items-center gap-4 pb-4 border-b border-gray-200">
-              <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-teal-100 shadow-md">
+              <div className="relative w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-cyan-100 shadow-lg shadow-cyan-500/10">
                 {photoUrl && !imageLoadError ? (
                   <img 
                     src={photoUrl} 
@@ -235,7 +247,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex flex-col gap-2 items-center">
                 <div className="flex gap-2">
-                  <label htmlFor="photo-upload" className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 cursor-pointer text-sm font-medium">
+                  <label htmlFor="photo-upload" className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-700 text-white rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 cursor-pointer text-sm font-semibold transition-all">
                     <Upload className="h-4 w-4" />
                     {isUploadingPhoto ? 'Uploading...' : 'Upload Photo'}
                   </label>
@@ -249,7 +261,7 @@ export default function ProfilePage() {
                         setSavedMessage('Photo removed — click Save Profile to apply');
                         window.setTimeout(() => setSavedMessage(''), 3000);
                       }}
-                      className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-md hover:bg-red-100 text-sm font-medium border border-red-200"
+                      className="flex items-center gap-2 px-4 py-2.5 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 text-sm font-semibold border border-red-200 transition-colors"
                     >
                       <Trash2 className="h-4 w-4" />
                       Remove
@@ -266,7 +278,7 @@ export default function ProfilePage() {
                 />
                 <p className="text-xs text-gray-500">JPG, PNG, or WebP • Max 5MB</p>
                 {photoUploadError && <p className="text-xs text-red-600">❌ {photoUploadError}</p>}
-                {photoUrl && process.env.NODE_ENV === 'development' && (
+                {photoUrl && import.meta.env.DEV && (
                   <p className="text-xs text-gray-400 text-center break-all max-w-xs">Current: {photoUrl.substring(0, 50)}...</p>
                 )}
               </div>
@@ -275,18 +287,18 @@ export default function ProfilePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Display Name</label>
-                <input name="name" value={formData.name ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                <input name="name" value={formData.name ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Age</label>
-                <input name="age" type="number" min={18} value={formData.age ?? 18} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                <input name="age" type="number" min={18} value={formData.age ?? 18} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700">Gender</label>
-                <select name="gender" value={formData.gender ?? 'Other'} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white">
+                <select name="gender" value={formData.gender ?? 'Other'} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors">
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
                   <option value="Non-Binary">Non-Binary</option>
@@ -298,7 +310,7 @@ export default function ProfilePage() {
                 <select
                   value={formData.profile?.personality ?? 'Ambivert'}
                   onChange={(e) => handleProfileChange('personality', e.target.value as TravelProfile['personality'])}
-                  className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
                 >
                   <option value="Introvert">Introvert</option>
                   <option value="Extrovert">Extrovert</option>
@@ -310,17 +322,17 @@ export default function ProfilePage() {
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium text-gray-700 inline-flex items-center"><Globe className="h-4 w-4 mr-1" /> Home Country</label>
-                <input name="homeCountry" value={formData.homeCountry ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                <input name="homeCountry" value={formData.homeCountry ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 inline-flex items-center"><MapPin className="h-4 w-4 mr-1" /> Current City</label>
-                <input name="currentCity" value={formData.currentCity ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+                <input name="currentCity" value={formData.currentCity ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
             </div>
 
             <div>
               <label className="text-sm font-medium text-gray-700">Bio</label>
-              <textarea name="bio" rows={4} value={formData.bio ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm" />
+              <textarea name="bio" rows={4} value={formData.bio ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
             </div>
           </div>
         )}
@@ -334,7 +346,7 @@ export default function ProfilePage() {
                   <button
                     key={option}
                     onClick={() => handleProfileChange('budget', option)}
-                    className={`rounded-md px-3 py-2 text-sm border ${formData.profile?.budget === option ? 'bg-teal-50 border-teal-400 text-teal-700' : 'border-gray-300'}`}
+                    className={`rounded-xl px-4 py-2.5 text-sm border font-medium transition-all duration-200 ${formData.profile?.budget === option ? 'bg-cyan-50 border-cyan-400 text-cyan-700 shadow-sm' : 'border-gray-200 hover:border-cyan-300 hover:text-cyan-600'}`}
                   >
                     {option}
                   </button>
@@ -349,7 +361,7 @@ export default function ProfilePage() {
                   <button
                     key={option}
                     onClick={() => handleProfileChange('travelStyle', option)}
-                    className={`rounded-md px-3 py-2 text-sm border ${formData.profile?.travelStyle === option ? 'bg-teal-50 border-teal-400 text-teal-700' : 'border-gray-300'}`}
+                    className={`rounded-xl px-4 py-2.5 text-sm border font-medium transition-all duration-200 ${formData.profile?.travelStyle === option ? 'bg-cyan-50 border-cyan-400 text-cyan-700 shadow-sm' : 'border-gray-200 hover:border-cyan-300 hover:text-cyan-600'}`}
                   >
                     {option}
                   </button>
@@ -362,7 +374,7 @@ export default function ProfilePage() {
               <input
                 value={formData.profile?.languagePreference ?? ''}
                 onChange={(e) => handleProfileChange('languagePreference', e.target.value)}
-                className="mt-1 w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
                 placeholder="English, Hindi, Spanish..."
               />
             </div>
@@ -379,7 +391,7 @@ export default function ProfilePage() {
                   <button
                     key={interest}
                     onClick={() => toggleInterest(interest)}
-                    className={`px-3 py-1.5 rounded-full text-sm border ${selected ? 'bg-teal-100 text-teal-800 border-teal-200' : 'bg-white border-gray-300 text-gray-600'}`}
+                    className={`px-3.5 py-2 rounded-full text-sm border font-medium transition-all duration-200 ${selected ? 'bg-cyan-50 text-cyan-700 border-cyan-300 shadow-sm' : 'bg-white border-gray-200 text-gray-500 hover:border-cyan-300 hover:text-cyan-600'}`}
                   >
                     {interest}
                   </button>
@@ -403,28 +415,28 @@ export default function ProfilePage() {
               placeholder="Current password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
             />
             <input
               type="password"
               placeholder="New password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
             />
             <input
               type="password"
               placeholder="Confirm new password"
               value={confirmNewPassword}
               onChange={(e) => setConfirmNewPassword(e.target.value)}
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
             />
           </div>
           <div className="flex items-center gap-3 mt-2">
             <button
               onClick={handleChangePassword}
               disabled={isChangingPassword || !currentPassword || !newPassword}
-              className="px-4 py-2 text-sm font-medium bg-gray-800 text-white rounded-md hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="px-5 py-2.5 text-sm font-semibold bg-gray-800 text-white rounded-xl hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               {isChangingPassword ? 'Changing...' : 'Update Password'}
             </button>
@@ -438,7 +450,7 @@ export default function ProfilePage() {
 
         <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
           <span className="text-sm text-green-600">{savedMessage}</span>
-          <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed">
+          <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-700 hover:to-sky-800 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
             {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />} {isSaving ? 'Saving...' : 'Save Profile'}
           </button>
         </div>

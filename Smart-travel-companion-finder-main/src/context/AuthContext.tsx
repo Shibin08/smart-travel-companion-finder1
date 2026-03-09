@@ -3,14 +3,29 @@ import { createContext, useContext, useState } from 'react';
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types';
-import { getUserIdFromToken, loginWithBackend, registerWithBackend, updateUserProfile, isTokenExpired, fetchMyProfile } from '../utils/apiClient';
+import { getUserIdFromToken, loginWithBackend, googleLoginWithBackend, registerWithBackend, updateUserProfile, isTokenExpired, fetchMyProfile } from '../utils/apiClient';
 import { devLog, devWarn, devError } from '../utils/devLogger';
 
 const TOKEN_STORAGE_KEY = 'tcf_token';
 
+const normalizeTravelStyle = (value?: string | null): User['profile']['travelStyle'] => {
+    if (
+        value === 'Backpacking'
+        || value === 'Luxury'
+        || value === 'Standard'
+        || value === 'Adventure'
+        || value === 'Leisure'
+        || value === 'Business'
+    ) {
+        return value;
+    }
+    return 'Adventure';
+};
+
 interface AuthContextType {
     user: User | null;
     login: (email: string, password: string) => Promise<boolean>;
+    googleLogin: (credential: string) => Promise<boolean>;
     register: (email: string, password: string, name: string, gender?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => void;
     updateProfile: (profile: Partial<User>) => Promise<boolean>;
@@ -22,7 +37,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
     const [user, setUser] = useState<User | null>(() => {
         const stored = localStorage.getItem('tcf_user');
-        if (!stored) return null;
+        const token = localStorage.getItem('tcf_token');
+        if (!stored || !token) return null;
 
         try {
             const parsed = JSON.parse(stored) as Partial<User>;
@@ -99,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 const profile = await fetchMyProfile(response.access_token);
                 devLog('[Auth] Fetched profile from backend:', profile.name, profile.photo_url);
                 const budgetLabel = profile.budget_range != null
-                    ? profile.budget_range <= 500 ? 'Low' : profile.budget_range <= 2000 ? 'Medium' : 'High'
+                    ? profile.budget_range <= 6000 ? 'Low' : profile.budget_range <= 9000 ? 'Medium' : 'High'
                     : 'Medium';
 
                 setUser({
@@ -116,8 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     destination: profile.destination || undefined,
                     profile: {
                         budget: budgetLabel as 'Low' | 'Medium' | 'High',
-                        travelStyle: profile.travel_style || 'Adventure',
-                        interests: profile.interests ? profile.interests.split(',').map((s) => s.trim()) : [],
+                        travelStyle: normalizeTravelStyle(profile.travel_style),
+                        interests: profile.interests ? profile.interests.split(/[|,]/).map((s: string) => s.trim()).filter(Boolean) : [],
                         languagePreference: profile.language_preference || undefined,
                     },
                     preferences: {
@@ -143,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     gender: 'Other',
                     verificationStatus: 'Pending',
                     bio: '',
-                    photoUrl: 'https://images.unsplash.com/photo-1502134249126-9f3755a50d78?auto=format&fit=crop&q=80&w=250&h=250',
+                    photoUrl: undefined,
                     homeCountry: 'India',
                     currentCity: 'Unknown',
                     profile: {
@@ -171,6 +187,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const googleLogin = async (credential: string): Promise<boolean> => {
+        try {
+            const response = await googleLoginWithBackend(credential);
+            localStorage.setItem(TOKEN_STORAGE_KEY, response.access_token);
+            const backendUserId = getUserIdFromToken(response.access_token);
+
+            if (!backendUserId) return false;
+
+            try {
+                const profile = await fetchMyProfile(response.access_token);
+                devLog('[Auth] Google login — fetched profile:', profile.name);
+                const budgetLabel = profile.budget_range != null
+                    ? profile.budget_range <= 6000 ? 'Low' : profile.budget_range <= 9000 ? 'Medium' : 'High'
+                    : 'Medium';
+
+                setUser({
+                    userId: backendUserId,
+                    email: profile.email || '',
+                    name: profile.name || 'User',
+                    age: profile.age ?? 25,
+                    gender: (profile.gender as 'Male' | 'Female' | 'Non-Binary' | 'Other') || 'Other',
+                    verificationStatus: 'Pending',
+                    bio: profile.bio || '',
+                    photoUrl: profile.photo_url || undefined,
+                    homeCountry: profile.home_country || 'India',
+                    currentCity: profile.current_city || 'Unknown',
+                    destination: profile.destination || undefined,
+                    profile: {
+                        budget: budgetLabel as 'Low' | 'Medium' | 'High',
+                        travelStyle: normalizeTravelStyle(profile.travel_style),
+                        interests: profile.interests ? profile.interests.split(/[|,]/).map((s: string) => s.trim()).filter(Boolean) : [],
+                        languagePreference: profile.language_preference || undefined,
+                    },
+                    preferences: {
+                        notifications: true,
+                        locationSharing: false,
+                        publicProfile: profile.discoverable,
+                    },
+                    stats: {
+                        tripsCompleted: 0,
+                        reviewsReceived: 0,
+                        averageRating: 0,
+                        responseRate: 0,
+                    },
+                });
+            } catch (profileErr) {
+                devError('[Auth] Google login — profile fetch failed, using defaults:', profileErr);
+                setUser({
+                    userId: backendUserId,
+                    email: '',
+                    name: 'User',
+                    age: 25,
+                    gender: 'Other',
+                    verificationStatus: 'Pending',
+                    bio: '',
+                    photoUrl: undefined,
+                    homeCountry: 'India',
+                    currentCity: 'Unknown',
+                    profile: { budget: 'Medium', travelStyle: 'Adventure', interests: [] },
+                    preferences: { notifications: true, locationSharing: false, publicProfile: true },
+                    stats: { tripsCompleted: 0, reviewsReceived: 0, averageRating: 0, responseRate: 0 },
+                });
+            }
+
+            return true;
+        } catch (err) {
+            devError('[Auth] Google login failed:', err);
+            return false;
+        }
+    };
+
     const register = async (email: string, password: string, name: string, gender: string = 'Other'): Promise<{ success: boolean; error?: string }> => {
         if (!email || !password || !name) {
             return { success: false, error: 'All fields are required' };
@@ -179,52 +266,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
             devLog('Registering user:', email);
             await registerWithBackend(email, password, name, gender);
-            devLog('Registration successful, attempting login...');
-            
-            // After successful registration, automatically log the user in
-            const response = await loginWithBackend(email, password);
-            localStorage.setItem(TOKEN_STORAGE_KEY, response.access_token);
-            const backendUserId = getUserIdFromToken(response.access_token);
-
-            if (!backendUserId) {
-                return { success: false, error: 'Failed to get user ID from token' };
-            }
-
-            // Get default photo based on gender
-            const defaultPhotoUrl = gender === 'Male'
-                ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=250&h=250'
-                : gender === 'Female'
-                ? 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=250&h=250'
-                : 'https://images.unsplash.com/photo-1502134249126-9f3755a50d78?auto=format&fit=crop&q=80&w=250&h=250';
-
-            setUser({
-                userId: backendUserId,
-                email,
-                name,
-                age: 25,
-                gender: (gender as 'Male' | 'Female' | 'Non-Binary' | 'Other') || 'Other',
-                verificationStatus: 'Pending',
-                bio: '',
-                photoUrl: defaultPhotoUrl,
-                homeCountry: 'India',
-                currentCity: 'Unknown',
-                profile: {
-                    budget: 'Medium',
-                    travelStyle: 'Adventure',
-                    interests: [],
-                },
-                preferences: {
-                    notifications: true,
-                    locationSharing: false,
-                    publicProfile: true,
-                },
-                stats: {
-                    tripsCompleted: 0,
-                    reviewsReceived: 0,
-                    averageRating: 0,
-                    responseRate: 0,
-                },
-            });
+            devLog('Registration successful');
             return { success: true };
         } catch (error: unknown) {
             const errorMsg = error instanceof Error ? error.message : 'Registration failed';
@@ -265,11 +307,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     photo_url: updates.photoUrl !== undefined ? (updates.photoUrl || '') : undefined,
                     destination: updates.destination,
                     budget_range: updates.profile?.budget ? {
-                        'Low': 500,
-                        'Medium': 2000,
-                        'High': 5000,
+                        'Low': 5000,
+                        'Medium': 8000,
+                        'High': 10000,
                     }[updates.profile.budget] : undefined,
-                    interests: updates.profile?.interests?.join(','),
+                    interests: updates.profile?.interests?.join('|'),
                     travel_style: updates.profile?.travelStyle,
                     language_preference: updates.profile?.languagePreference,
                     discoverable: true,
@@ -285,7 +327,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, updateProfile, isAuthenticated: !!user }}>
+        <AuthContext.Provider value={{ user, login, googleLogin, register, logout, updateProfile, isAuthenticated: !!user }}>
             {children}
         </AuthContext.Provider>
     );

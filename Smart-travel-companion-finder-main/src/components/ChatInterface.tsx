@@ -2,7 +2,7 @@ import { useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Send, Lock, MessageCircle, Smile, Reply, X,
-  MoreVertical, VolumeX, Volume2, Ban, Trash2, Flag, Palette, Check, User as UserIcon,
+  MoreVertical, VolumeX, Volume2, Ban, Trash2, Flag, User as UserIcon, Plane, MapPin, ArrowLeft,
 } from 'lucide-react';
 import type { ChatMessage, Match, User } from '../types';
 import UserAvatar from './UserAvatar';
@@ -17,15 +17,13 @@ interface ChatInterfaceProps {
 
 const EMOJI_LIST = ['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👎', '❤️', '🔥', '🎉', '✈️', '🌍', '🏖️', '⛰️', '🗺️', '😢', '😡', '🤝', '✅', '💯', '🙏', '👋', '🤩'];
 
-type ChatTheme = 'default' | 'ocean' | 'sunset' | 'forest' | 'lavender' | 'midnight';
-
-const CHAT_THEMES: Record<ChatTheme, { label: string; myBubble: string; myText: string; theirBubble: string; theirText: string; bg: string; accent: string; preview: string }> = {
-  default:  { label: 'Default',  myBubble: 'bg-teal-600',    myText: 'text-white',   theirBubble: 'bg-white',     theirText: 'text-gray-900', bg: 'bg-gray-50',    accent: 'text-teal-200', preview: 'bg-teal-600' },
-  ocean:    { label: 'Ocean',    myBubble: 'bg-blue-600',    myText: 'text-white',   theirBubble: 'bg-blue-50',   theirText: 'text-blue-900', bg: 'bg-blue-50/50', accent: 'text-blue-200', preview: 'bg-blue-600' },
-  sunset:   { label: 'Sunset',   myBubble: 'bg-orange-500',  myText: 'text-white',   theirBubble: 'bg-orange-50', theirText: 'text-orange-900', bg: 'bg-orange-50/30', accent: 'text-orange-200', preview: 'bg-orange-500' },
-  forest:   { label: 'Forest',   myBubble: 'bg-green-700',   myText: 'text-white',   theirBubble: 'bg-green-50',  theirText: 'text-green-900', bg: 'bg-green-50/30', accent: 'text-green-200', preview: 'bg-green-700' },
-  lavender: { label: 'Lavender', myBubble: 'bg-purple-600',  myText: 'text-white',   theirBubble: 'bg-purple-50', theirText: 'text-purple-900', bg: 'bg-purple-50/30', accent: 'text-purple-200', preview: 'bg-purple-600' },
-  midnight: { label: 'Midnight', myBubble: 'bg-indigo-600',  myText: 'text-white',   theirBubble: 'bg-slate-100', theirText: 'text-slate-900', bg: 'bg-slate-100/50', accent: 'text-indigo-200', preview: 'bg-indigo-600' },
+const CHAT_THEME = {
+  myBubble: 'bg-cyan-600',
+  myText: 'text-white',
+  theirBubble: 'bg-white',
+  theirText: 'text-gray-900',
+  bg: 'bg-gray-50',
+  accent: 'text-cyan-200',
 };
 
 export default function ChatInterface({ match, currentUser, messages, onSendMessage, onClearChat }: ChatInterfaceProps) {
@@ -34,8 +32,6 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [showThemePicker, setShowThemePicker] = useState(false);
-  const [chatTheme, setChatTheme] = useState<ChatTheme>('default');
   const [isMuted, setIsMuted] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -45,7 +41,7 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
 
   const isLocked = match.matchStatus !== 'Matched';
   const hasMessages = messages.length > 0;
-  const theme = CHAT_THEMES[chatTheme];
+  const theme = CHAT_THEME;
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -60,7 +56,6 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
       }
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowMenu(false);
-        setShowThemePicker(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -133,13 +128,6 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
     setShowMenu(false);
   };
 
-  const handleThemeSelect = (t: ChatTheme) => {
-    setChatTheme(t);
-    setShowThemePicker(false);
-    setShowMenu(false);
-    showToast(`Theme changed to ${CHAT_THEMES[t].label}`);
-  };
-
   const handleViewProfile = () => {
     setShowMenu(false);
     navigate(`/match/${match.matchId}`);
@@ -147,20 +135,26 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
 
   if (isLocked) {
     return (
-      <div className="h-96 bg-gray-100 rounded-lg flex flex-col items-center justify-center text-center p-6 border border-gray-200">
-        <div className="bg-gray-200 p-4 rounded-full mb-4">
-          <Lock className="h-8 w-8 text-gray-500" />
+      <div className="h-96 bg-gradient-to-br from-gray-50/80 to-cyan-50/30 backdrop-blur-sm rounded-2xl flex flex-col items-center justify-center text-center p-6 border border-gray-200/60">
+        <div className="bg-white p-5 rounded-2xl mb-4 shadow-md border border-gray-100 relative">
+          <Lock className="h-8 w-8 text-gray-400" />
+          <div className="absolute -top-1 -right-1 p-1 bg-cyan-600 rounded-full">
+            <MapPin className="h-3 w-3 text-white" />
+          </div>
         </div>
-        <h3 className="text-lg font-medium text-gray-900">Chat Locked</h3>
-        <p className="max-w-xs text-gray-500 mt-2">
+        <h3 className="text-lg font-bold text-gray-900">Chat Locked</h3>
+        <p className="max-w-xs text-gray-500 mt-2 text-sm">
           You need to connect with {match.user.name} and have them accept your request to start chatting.
         </p>
+        <div className="mt-4 flex items-center gap-2 text-xs text-cyan-600 font-medium bg-cyan-50 px-4 py-2 rounded-full">
+          <Plane className="h-3.5 w-3.5" /> Connect first to plan your trip together
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative flex flex-col h-full bg-white rounded-lg border border-gray-200 shadow-sm">
+    <div className="relative flex flex-col h-full bg-white/90 backdrop-blur-sm rounded-2xl border border-gray-200/60 shadow-md overflow-hidden">
       {/* Toast notification */}
       {toast && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-[60] bg-gray-900 text-white text-xs px-4 py-2 rounded-full shadow-lg animate-fade-in">
@@ -169,13 +163,16 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
       )}
 
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-200 flex items-center">
+      <div className="px-4 py-3.5 border-b border-gray-200/60 flex items-center bg-white/80 backdrop-blur-sm">
+        <button type="button" onClick={() => navigate(-1)} className="p-1.5 mr-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors">
+          <ArrowLeft size={18} />
+        </button>
         <button type="button" onClick={handleViewProfile} className="relative shrink-0 group/avatar">
-          <UserAvatar src={match.user.photoUrl} name={match.user.name} className="h-10 w-10 rounded-full group-hover/avatar:ring-2 group-hover/avatar:ring-teal-400 transition-all text-sm" />
+          <UserAvatar src={match.user.photoUrl} name={match.user.name} className="h-10 w-10 rounded-full group-hover/avatar:ring-2 group-hover/avatar:ring-cyan-400 transition-all text-sm" />
           <span className="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-white bg-green-400" />
         </button>
         <div className="ml-3 flex-1 min-w-0">
-          <button type="button" onClick={handleViewProfile} className="text-sm font-medium text-gray-900 hover:text-teal-600 transition-colors flex items-center gap-1.5">
+          <button type="button" onClick={handleViewProfile} className="text-sm font-medium text-gray-900 hover:text-cyan-600 transition-colors flex items-center gap-1.5">
             {match.user.name}
             {isMuted && <VolumeX size={12} className="text-gray-400" />}
           </button>
@@ -186,7 +183,7 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            onClick={() => { setShowMenu((v) => !v); setShowThemePicker(false); }}
+            onClick={() => { setShowMenu((v) => !v); }}
             className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
           >
             <MoreVertical size={20} />
@@ -240,39 +237,6 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
                 <Flag size={16} />
                 Report
               </button>
-
-              <div className="border-t border-gray-100 my-1" />
-
-              {/* Chat Theme */}
-              <button
-                onClick={() => setShowThemePicker((v) => !v)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <Palette size={16} />
-                Chat Theme
-              </button>
-
-              {/* Theme picker submenu */}
-              {showThemePicker && (
-                <div className="px-3 pb-2 pt-1">
-                  <div className="grid grid-cols-3 gap-1.5">
-                    {(Object.keys(CHAT_THEMES) as ChatTheme[]).map((key) => (
-                      <button
-                        key={key}
-                        onClick={() => handleThemeSelect(key)}
-                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg text-[10px] transition-colors ${
-                          chatTheme === key ? 'bg-gray-100 ring-1 ring-gray-300' : 'hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className={`w-6 h-6 rounded-full ${CHAT_THEMES[key].preview} flex items-center justify-center`}>
-                          {chatTheme === key && <Check size={12} className="text-white" />}
-                        </span>
-                        <span className="text-gray-600">{CHAT_THEMES[key].label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
@@ -282,11 +246,15 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
       <div ref={messagesContainerRef} className={`flex-1 overflow-y-auto p-4 space-y-4 ${theme.bg}`} style={{ display: 'flex', flexDirection: 'column' }}>
         {!hasMessages ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-6">
-            <div className="bg-white rounded-full p-4 shadow-sm border border-gray-100">
-              <MessageCircle className="h-6 w-6 text-teal-600" />
+              <div className="bg-white rounded-2xl p-5 shadow-md border border-gray-100 relative">
+              <MessageCircle className="h-7 w-7 text-cyan-600" />
+              <div className="absolute -top-1 -right-1 p-1 bg-cyan-500 rounded-full">
+                <Plane className="h-3 w-3 text-white" />
+              </div>
             </div>
-            <h4 className="mt-4 font-semibold text-gray-800">No messages yet</h4>
+            <h4 className="mt-4 font-bold text-gray-800">No messages yet</h4>
             <p className="text-sm text-gray-500 mt-1">{introText}</p>
+            <p className="text-xs text-cyan-600 mt-3 bg-cyan-50 px-4 py-1.5 rounded-full font-medium">Say hello to start planning! 👋</p>
           </div>
         ) : (
           messages.map((msg) => {
@@ -303,19 +271,19 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
                     <Reply size={14} />
                   </button>
                 )}
-                <div className={`max-w-xs px-4 py-2 rounded-lg text-sm ${isMe ? `${theme.myBubble} ${theme.myText}` : `${theme.theirBubble} ${theme.theirText} shadow-sm`}`}>
+                <div className={`max-w-xs px-4 py-2.5 rounded-2xl text-sm ${isMe ? `${theme.myBubble} ${theme.myText}` : `${theme.theirBubble} ${theme.theirText} shadow-sm border border-gray-100/60`}`}>
                   {/* Quoted reply preview */}
                   {msg.replyTo && (
                     <div className={`mb-1.5 pb-1.5 border-b text-[11px] ${isMe ? 'border-white/20' : 'border-gray-200'}`}>
-                      <div className={`pl-2 border-l-2 ${isMe ? 'border-white/40 text-white/70' : 'border-teal-500 text-gray-500'}`}>
-                        <p className="font-medium text-[10px]">
+                      <div className={`pl-2 border-l-2 ${isMe ? 'border-white/40 text-white/70' : 'border-cyan-500 text-gray-500'}`}>
+                        <p className={`font-medium text-[10px] ${isMe ? 'text-white/80' : 'text-gray-600'}`}>
                           {msg.replyTo.senderId === currentUser.userId ? 'You' : match.user.name}
                         </p>
-                        <p className="truncate max-w-[180px]">{msg.replyTo.text}</p>
+                        <p className={`truncate max-w-[180px] ${isMe ? 'text-white/75' : 'text-gray-500'}`}>{msg.replyTo.text}</p>
                       </div>
                     </div>
                   )}
-                  <p>{msg.text}</p>
+                  <p className={isMe ? 'text-white' : 'text-gray-800'}>{msg.text}</p>
                   <p className={`text-[10px] mt-1 ${isMe ? theme.accent : 'text-gray-400'}`}>
                     {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </p>
@@ -339,9 +307,9 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
       {/* Reply preview bar */}
       {replyingTo && (
         <div className="px-3 pt-2 pb-1 border-t border-gray-200 bg-gray-50 flex items-center gap-2">
-          <Reply size={14} className="text-teal-600 shrink-0" />
-          <div className="flex-1 min-w-0 pl-2 border-l-2 border-teal-500">
-            <p className="text-[11px] font-medium text-teal-700">
+          <Reply size={14} className="text-cyan-600 shrink-0" />
+          <div className="flex-1 min-w-0 pl-2 border-l-2 border-cyan-500">
+            <p className="text-[11px] font-medium text-cyan-700">
               {replyingTo.senderId === currentUser.userId ? 'You' : match.user.name}
             </p>
             <p className="text-xs text-gray-500 truncate">{replyingTo.text}</p>
@@ -357,7 +325,7 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
       )}
 
       {/* Input */}
-      <form onSubmit={handleSend} className={`p-3 border-t border-gray-200 bg-white ${replyingTo ? 'border-t-0' : ''}`}>
+      <form onSubmit={handleSend} className={`p-3 border-t border-gray-200/60 bg-white/80 backdrop-blur-sm ${replyingTo ? 'border-t-0' : ''}`}>
         <div className="flex items-center space-x-2">
           {/* Emoji picker */}
           <div className="relative" ref={emojiPickerRef}>
@@ -365,7 +333,7 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
               type="button"
               onClick={() => setShowEmojiPicker((v) => !v)}
               className={`p-2 rounded-full transition-colors ${
-                showEmojiPicker ? 'bg-teal-100 text-teal-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
+                showEmojiPicker ? 'bg-cyan-100 text-cyan-600' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'
               }`}
               aria-label="Toggle emoji picker"
               aria-expanded={showEmojiPicker}
@@ -396,10 +364,10 @@ export default function ChatInterface({ match, currentUser, messages, onSendMess
             type="text"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm"
+            className="flex-1 border border-gray-200 rounded-full px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 text-sm bg-gray-50/50 transition-colors"
             placeholder="Type a message..."
           />
-          <button type="submit" className="p-2 bg-teal-600 text-white rounded-full hover:bg-teal-700 disabled:opacity-50" disabled={!newMessage.trim()} aria-label="Send message">
+          <button type="submit" className="p-2.5 bg-gradient-to-r from-cyan-600 to-sky-700 text-white rounded-full hover:shadow-lg hover:shadow-cyan-500/25 disabled:opacity-50 transition-all" disabled={!newMessage.trim()} aria-label="Send message">
             <Send size={20} />
           </button>
         </div>

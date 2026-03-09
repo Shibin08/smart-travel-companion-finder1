@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
-from models import Review, User
+from models import Match, Review, ReviewVote, User
 from schemas import ReviewCreate, ReviewListResponse, ReviewResponse, ReviewUpdate, ReviewCategories
 
 router = APIRouter(prefix="/reviews", tags=["Reviews"])
@@ -59,6 +60,29 @@ def create_review(
     reviewee = db.query(User).filter(User.user_id == body.reviewee_id).first()
     if not reviewee:
         raise HTTPException(status_code=404, detail="Reviewee not found")
+
+    # Reviewer must have an accepted match with the reviewee.
+    match_query = (
+        db.query(Match)
+        .filter(
+            Match.status == "accepted",
+            or_(
+                (Match.user1_id == current_user.user_id) & (Match.user2_id == body.reviewee_id),
+                (Match.user1_id == body.reviewee_id) & (Match.user2_id == current_user.user_id),
+            ),
+        )
+    )
+    if body.match_id is not None:
+        match_query = match_query.filter(Match.match_id == body.match_id)
+
+    match = match_query.first()
+    if not match:
+        if body.match_id is None:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only review users you have an accepted match with",
+            )
+        raise HTTPException(status_code=403, detail="Invalid or non-accepted match for this review")
 
     existing = (
         db.query(Review)
@@ -154,6 +178,19 @@ def vote_helpful(
 
     if review.reviewer_id == current_user.user_id:
         raise HTTPException(status_code=400, detail="Cannot vote your own review")
+
+    # Check if user already voted
+    existing_vote = (
+        db.query(ReviewVote)
+        .filter(ReviewVote.review_id == review_id, ReviewVote.user_id == current_user.user_id)
+        .first()
+    )
+    if existing_vote:
+        raise HTTPException(status_code=400, detail="You have already voted this review as helpful")
+
+    # Record the vote
+    vote = ReviewVote(review_id=review_id, user_id=current_user.user_id)
+    db.add(vote)
 
     review.helpful_votes += 1
     db.commit()

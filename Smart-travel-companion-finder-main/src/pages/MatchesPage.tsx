@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, CheckCircle, Clock, XCircle, MessageCircle, Search } from 'lucide-react';
+import { Users, CheckCircle, Clock, XCircle, MessageCircle, Search, Plane, Globe, MapPin } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import UserAvatar from '../components/UserAvatar';
@@ -14,7 +14,7 @@ export default function MatchesPage() {
   const [tab, setTab] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => { document.title = 'My Matches — Travel Companion Finder'; }, []);
+  useEffect(() => { document.title = 'My Matches - TravelMatch'; }, []);
 
   useEffect(() => {
     if (user && matches.length === 0) {
@@ -53,7 +53,7 @@ export default function MatchesPage() {
   const statusBadge = (status: string) => {
     switch (status) {
       case 'Matched':
-        return <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700"><CheckCircle size={10} /> Connected</span>;
+        return <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700"><CheckCircle size={10} /> Connected</span>;
       case 'Pending':
         return <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"><Clock size={10} /> Pending</span>;
       case 'Rejected':
@@ -66,22 +66,33 @@ export default function MatchesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-          <Users className="h-6 w-6 text-teal-600" /> My Matches
-        </h1>
-        <p className="text-gray-600 mt-1">View and manage all your travel companion matches.</p>
+      <div className="relative overflow-hidden bg-gradient-to-r from-cyan-700 via-sky-700 to-teal-700 rounded-3xl p-6 sm:p-8 shadow-xl shadow-cyan-500/20 text-white animate-slide-up">
+        {/* Floating decorative icons */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <Plane className="absolute top-4 right-[12%] h-7 w-7 text-white/10 animate-float rotate-[-15deg]" />
+          <Globe className="absolute bottom-4 left-[8%] h-8 w-8 text-white/10 animate-float-delayed" />
+          <MapPin className="absolute top-6 left-[55%] h-5 w-5 text-white/10 animate-float-slow" />
+        </div>
+        <div className="relative z-10">
+          <h1 className="text-2xl sm:text-3xl font-extrabold flex items-center gap-3">
+            <span className="p-2.5 bg-white/15 rounded-xl backdrop-blur-sm">
+              <Users className="h-6 w-6" />
+            </span>
+            My Matches
+          </h1>
+          <p className="text-cyan-100 mt-2 max-w-lg">View and manage all your travel companion matches.</p>
 
-        {/* Search */}
-        <div className="relative mt-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by name, city, or travel style..."
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-          />
+          {/* Search */}
+          <div className="relative mt-5 max-w-xl">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/50" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by name, city, or travel style..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-white/20 bg-white/10 backdrop-blur-sm text-sm text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-white/30 focus:border-white/40 transition-all duration-200"
+            />
+          </div>
         </div>
       </div>
 
@@ -91,15 +102,15 @@ export default function MatchesPage() {
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
               tab === t.key
-                ? 'bg-teal-600 text-white'
-                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                ? 'bg-gradient-to-r from-cyan-600 to-sky-700 text-white shadow-md shadow-cyan-500/25'
+                : 'bg-white/80 backdrop-blur-sm text-gray-600 border border-gray-200/60 hover:bg-white hover:shadow-sm'
             }`}
           >
             {t.icon}
             {t.label}
-            <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${tab === t.key ? 'bg-teal-500 text-white' : 'bg-gray-100 text-gray-500'}`}>
+            <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${tab === t.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-500'}`}>
               {t.count}
             </span>
           </button>
@@ -109,15 +120,17 @@ export default function MatchesPage() {
       {/* Loading */}
       {isMatching && (
         <div className="text-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600 mx-auto" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-cyan-200 border-t-cyan-600 mx-auto" />
           <p className="text-gray-500 mt-3 text-sm">Loading matches...</p>
         </div>
       )}
 
       {/* Empty state */}
       {!isMatching && filtered.length === 0 && (
-        <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
-          <Users className="h-12 w-12 text-gray-300 mx-auto" />
+        <div className="text-center py-16 bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 shadow-sm">
+          <div className="inline-flex items-center justify-center p-4 bg-gray-100/80 rounded-2xl mx-auto">
+            <Users className="h-10 w-10 text-gray-400" />
+          </div>
           <h3 className="text-lg font-medium text-gray-800 mt-4">No matches found</h3>
           <p className="text-gray-500 text-sm mt-1">
             {tab === 'all'
@@ -127,7 +140,7 @@ export default function MatchesPage() {
           {tab === 'all' && (
             <button
               onClick={() => navigate('/find-companion')}
-              className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-md text-sm font-medium hover:bg-teal-700"
+              className="mt-4 px-5 py-2.5 bg-gradient-to-r from-cyan-600 to-sky-700 text-white rounded-xl text-sm font-medium hover:shadow-lg hover:shadow-cyan-500/25 hover:-translate-y-0.5 transition-all duration-200"
             >
               Find Companions
             </button>
@@ -137,11 +150,11 @@ export default function MatchesPage() {
 
       {/* Match list */}
       {!isMatching && filtered.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3 stagger-children">
           {filtered.map((match) => (
             <div
               key={match.matchId}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:border-teal-200 transition-colors"
+              className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-4 shadow-sm hover:border-cyan-300 hover:shadow-md transition-all duration-200 group card-hover-glow"
             >
               <div className="flex items-center gap-4">
                 <UserAvatar
@@ -155,10 +168,10 @@ export default function MatchesPage() {
                     {statusBadge(match.matchStatus)}
                   </div>
                   <p className="text-sm text-gray-500 mt-0.5">
-                    {match.user.age} • {match.user.gender} • {match.user.currentCity}
+                    {match.user.age} - {match.user.gender} - {match.user.currentCity}
                   </p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-500">
-                    <span className="font-medium text-teal-700">{match.score}% compatible</span>
+                    <span className="font-medium text-cyan-700">{match.score}% compatible</span>
                     <span>{match.user.profile.travelStyle}</span>
                     <span>{match.user.profile.budget} budget</span>
                   </div>
@@ -167,7 +180,7 @@ export default function MatchesPage() {
                   {match.matchStatus === 'Matched' && (
                     <button
                       onClick={() => navigate(`/chat/${match.matchId}`)}
-                      className="p-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
+                      className="p-2 bg-gradient-to-r from-cyan-600 to-sky-700 text-white rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 transition-all duration-200"
                       title="Chat"
                     >
                       <MessageCircle size={18} />
@@ -175,7 +188,7 @@ export default function MatchesPage() {
                   )}
                   <button
                     onClick={() => navigate(`/match/${match.matchId}`)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white/80 border border-gray-200/60 rounded-xl hover:bg-white hover:shadow-sm transition-all duration-200"
                   >
                     View
                   </button>

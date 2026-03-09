@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MessageCircle, RefreshCw } from 'lucide-react';
+import { MessageCircle, RefreshCw, Plane, Globe } from 'lucide-react';
 import { fetchConversations, fetchUserPublicProfile, type BackendConversationSummary } from '../utils/apiClient';
 import UserAvatar from '../components/UserAvatar';
 import { resolvePhoto } from '../utils/photoUtils';
@@ -14,7 +14,7 @@ export default function ConversationsPage() {
   const [error, setError] = useState('');
   const [photoMap, setPhotoMap] = useState<Record<string, string | undefined>>({});
 
-  useEffect(() => { document.title = 'Conversations — Travel Companion Finder'; }, []);
+  useEffect(() => { document.title = 'Conversations - TravelMatch'; }, []);
 
   const loadConversations = async () => {
     const token = localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -54,26 +54,39 @@ export default function ConversationsPage() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Conversations</h1>
-          <p className="text-sm text-gray-500">Your latest backend chat history</p>
+      <div className="relative overflow-hidden bg-gradient-to-r from-cyan-700 via-sky-700 to-teal-700 rounded-3xl p-5 sm:p-6 shadow-xl shadow-cyan-500/20 text-white animate-slide-up">
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <Plane className="absolute top-3 right-[10%] h-6 w-6 text-white/10 animate-float rotate-[-20deg]" />
+          <Globe className="absolute bottom-3 left-[8%] h-7 w-7 text-white/10 animate-float-delayed" />
         </div>
-        <button
-          onClick={() => void loadConversations()}
-          className="inline-flex items-center px-3 py-2 rounded-md text-sm border border-gray-300 bg-white hover:bg-gray-50"
-        >
-          <RefreshCw className="h-4 w-4 mr-2" /> Refresh
-        </button>
+        <div className="relative z-10 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-extrabold flex items-center gap-3">
+              <span className="p-2 bg-white/15 rounded-xl backdrop-blur-sm">
+                <MessageCircle className="h-5 w-5" />
+              </span>
+              Conversations
+            </h1>
+            <p className="text-cyan-100 text-sm mt-1">Your latest chat history</p>
+          </div>
+          <button
+            onClick={() => void loadConversations()}
+            className="inline-flex items-center px-4 py-2.5 rounded-xl text-sm border border-white/20 bg-white/10 backdrop-blur-sm hover:bg-white/20 transition-all duration-200 font-medium text-white"
+          >
+            <RefreshCw className="h-4 w-4 mr-2" /> Refresh
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
         <ConversationSkeleton />
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-700">{error}</div>
+        <div className="bg-red-50/80 backdrop-blur-sm border border-red-200/60 rounded-2xl p-4 text-sm text-red-700">{error}</div>
       ) : conversations.length === 0 ? (
-        <div className="bg-white border border-gray-200 rounded-xl p-6 text-center">
-          <MessageCircle className="h-8 w-8 text-gray-400 mx-auto" />
+        <div className="bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl p-8 text-center shadow-sm">
+          <div className="inline-flex items-center justify-center p-4 bg-gray-100/80 rounded-2xl">
+            <MessageCircle className="h-8 w-8 text-gray-400" />
+          </div>
           <p className="mt-3 text-gray-700 font-medium">No conversations yet</p>
           <p className="text-sm text-gray-500 mt-1">Confirm a match and send a message to start chatting.</p>
         </div>
@@ -84,7 +97,7 @@ export default function ConversationsPage() {
               key={item.user_id}
               to={`/chat/api-${item.user_id}`}
               state={{ userName: item.name }}
-              className="block bg-white border border-gray-200 rounded-xl p-4 hover:border-teal-300 hover:shadow-sm transition"
+              className="block bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl p-4 hover:border-cyan-300 hover:shadow-md transition-all duration-200 group"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">

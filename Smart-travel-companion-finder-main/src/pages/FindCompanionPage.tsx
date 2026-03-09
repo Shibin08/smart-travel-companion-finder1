@@ -3,12 +3,15 @@ import {
   Calendar,
   Info,
   MapPin,
-  PlusCircle,
   Route,
   Search,
   Sparkles,
   Users,
   Wallet,
+  Globe,
+  Plane,
+  Mountain,
+  Compass,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
@@ -28,63 +31,31 @@ export default function FindCompanionPage() {
     matchError,
     validationErrors,
     isMatching,
-    placeRequests,
-    addPlaceRequest,
   } = useApp();
 
-  const [mode, setMode] = useState<'discover' | 'post'>('discover');
-
   const [destination, setDestination] = useState(currentTrip?.destination ?? 'Goa');
-  const [startDate, setStartDate] = useState(currentTrip?.startDate ?? '2026-03-10');
-  const [endDate, setEndDate] = useState(currentTrip?.endDate ?? '2026-03-15');
+  const defaultStart = new Date();
+  const defaultEnd = new Date(defaultStart); defaultEnd.setDate(defaultEnd.getDate() + 5);
+  const [startDate, setStartDate] = useState(currentTrip?.startDate ?? defaultStart.toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(currentTrip?.endDate ?? defaultEnd.toISOString().split('T')[0]);
   const [budget, setBudget] = useState<Trip['budget']>(currentTrip?.budget ?? 'Medium');
   const [travelType, setTravelType] = useState<Trip['travelType']>(currentTrip?.travelType ?? 'Leisure');
 
-  const [companionsNeeded, setCompanionsNeeded] = useState(1);
-  const [notes, setNotes] = useState('');
-  const [postError, setPostError] = useState('');
-  const [postSuccess, setPostSuccess] = useState('');
+  const [formError, setFormError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [requestFilter, setRequestFilter] = useState<'All' | Trip['travelType']>('All');
-  const [requestPage, setRequestPage] = useState(1);
 
-  useEffect(() => { document.title = 'Find Companion — Travel Companion Finder'; }, []);
+  useEffect(() => { document.title = 'Find Companion - TravelMatch'; }, []);
 
-  const REQUEST_PAGE_SIZE = 4;
-
-  const destinationMeta = useMemo(
-    () => destinations.find((d) => d.name.toLowerCase() === destination.trim().toLowerCase()),
-    [destination],
-  );
-
-  const mapEmbedUrl = useMemo(
-    () => `https://maps.google.com/maps?q=${encodeURIComponent(destination || 'India')}&t=&z=10&ie=UTF8&iwloc=&output=embed`,
-    [destination],
-  );
-
-  const placeImage = useMemo(() => {
-    if (destinationMeta?.image) return destinationMeta.image;
-    return `https://source.unsplash.com/900x500/?${encodeURIComponent(destination || 'travel destination')}`;
-  }, [destination, destinationMeta]);
+  // Only show new recommendations on this page (exclude already connected/pending)
+  const recommendedMatches = useMemo(() =>
+    matches.filter((m) => m.matchStatus === 'Recommended'),
+  [matches]);
 
   const stats = useMemo(() => {
-    const matched = matches.filter((m) => m.matchStatus === 'Matched').length;
-    const recommended = matches.filter((m) => m.matchStatus === 'Recommended').length;
-    return { matched, recommended };
-  }, [matches]);
-
-  const filteredRequests = useMemo(() => {
-    if (requestFilter === 'All') return placeRequests;
-    return placeRequests.filter((request) => request.travelType === requestFilter);
-  }, [placeRequests, requestFilter]);
-
-  const totalRequestPages = Math.max(1, Math.ceil(filteredRequests.length / REQUEST_PAGE_SIZE));
-
-  const pagedRequests = useMemo(() => {
-    const start = (requestPage - 1) * REQUEST_PAGE_SIZE;
-    return filteredRequests.slice(start, start + REQUEST_PAGE_SIZE);
-  }, [filteredRequests, requestPage]);
+    const recommended = recommendedMatches.length;
+    return { recommended };
+  }, [recommendedMatches]);
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
@@ -99,9 +70,15 @@ export default function FindCompanionPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTrip, matches.length, user]);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+
   const validatePageInputs = () => {
     if (!destination.trim()) return 'Destination is required.';
     if (!startDate || !endDate) return 'Select start and end dates.';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (new Date(startDate) < today) return 'Start date cannot be in the past. Please select today or a future date.';
+    if (new Date(endDate) < today) return 'End date cannot be in the past. Please select today or a future date.';
     if (new Date(startDate) > new Date(endDate)) return 'Start date cannot be after end date.';
     return '';
   };
@@ -112,12 +89,12 @@ export default function FindCompanionPage() {
 
     const inputError = validatePageInputs();
     if (inputError) {
-      setPostError(inputError);
+      setFormError(inputError);
       showToast('error', inputError);
       return;
     }
 
-    setPostError('');
+    setFormError('');
     const trip: Trip = {
       tripId: Date.now().toString(),
       userId: user.userId,
@@ -132,65 +109,7 @@ export default function FindCompanionPage() {
     if (createTrip(trip)) {
       setHasSearched(true);
       generateMatches(trip);
-      setMode('discover');
     }
-  };
-
-  const handlePostRequest = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) return;
-
-    const inputError = validatePageInputs();
-    if (inputError) {
-      setPostError(inputError);
-      showToast('error', inputError);
-      return;
-    }
-
-    if (notes.trim().length < 15) {
-      setPostError('Please add at least 15 characters in notes.');
-      showToast('error', 'Please add at least 15 characters in notes.');
-      return;
-    }
-
-    const posted = addPlaceRequest({
-      userId: user.userId,
-      userName: user.name,
-      destination,
-      placeImage,
-      pinLat: 0,
-      pinLng: 0,
-      pinLabel: destination,
-      startDate,
-      endDate,
-      companionsNeeded,
-      budget,
-      travelType,
-      notes,
-      status: 'Open',
-      applicants: [],
-    });
-
-    if (!posted) {
-      setPostError('Unable to post request. Please verify all fields.');
-      showToast('error', 'Unable to post request. Please verify all fields.');
-      return;
-    }
-
-    setPostError('');
-    setPostSuccess('Your place request is now live.');
-    setNotes('');
-    setCompanionsNeeded(1);
-    setMode('discover');
-    setRequestFilter('All');
-    setRequestPage(1);
-    showToast('success', 'Place request posted successfully.');
-    window.setTimeout(() => setPostSuccess(''), 2500);
-  };
-
-  const handleFilterChange = (nextFilter: 'All' | Trip['travelType']) => {
-    setRequestFilter(nextFilter);
-    setRequestPage(1);
   };
 
   return (
@@ -207,114 +126,80 @@ export default function FindCompanionPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Travel Companion Hub</h1>
-            <p className="text-sm text-gray-500">Find companions or post where you need travel buddies.</p>
-          </div>
-          <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50">
-            <button
-              onClick={() => setMode('discover')}
-              className={`px-3 py-1.5 rounded-md text-sm ${mode === 'discover' ? 'bg-white shadow text-teal-700' : 'text-gray-600'}`}
-            >
-              Discover Matches
-            </button>
-            <button
-              onClick={() => setMode('post')}
-              className={`px-3 py-1.5 rounded-md text-sm ${mode === 'post' ? 'bg-white shadow text-teal-700' : 'text-gray-600'}`}
-            >
-              Post Place Request
-            </button>
-          </div>
+      {/* Travel Hero Banner */}
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-cyan-700 via-sky-700 to-teal-700 p-8 sm:p-10 text-white shadow-xl shadow-cyan-500/20 animate-slide-up">
+        {/* Floating decorative icons */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+          <Plane className="absolute top-4 right-[15%] h-8 w-8 text-white/10 animate-float rotate-[-15deg]" />
+          <Globe className="absolute bottom-6 left-[10%] h-10 w-10 text-white/10 animate-float-delayed" />
+          <Mountain className="absolute top-8 left-[60%] h-7 w-7 text-white/10 animate-float-slow" />
+          <Compass className="absolute bottom-4 right-[8%] h-6 w-6 text-white/10 animate-float" />
+          <MapPin className="absolute top-[50%] left-[30%] h-5 w-5 text-white/10 animate-float-delayed" />
         </div>
 
-        <form onSubmit={mode === 'discover' ? handleFindCompanions : handlePostRequest} className="space-y-5">
-          <div className="mode-fade-in" key={mode}>
+        <div className="relative z-10">
+          <h1 className="section-title text-3xl sm:text-4xl font-extrabold tracking-tight">Discover Companions</h1>
+          <p className="mt-2 text-cyan-100 text-sm sm:text-base max-w-lg">Smart matching powered by shared interests, budget, travel style, and schedule overlap.</p>
+        </div>
+      </div>
+
+      <div className="glass-panel elevated-card rounded-2xl border border-white/50 p-6 sm:p-8 animate-slide-up-delay">
+        <form onSubmit={handleFindCompanions} className="space-y-5">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Destination</label>
-
-            {mode === 'discover' ? (
-              <>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {destinations.slice(0, 8).map((dest) => (
-                    <button
-                      key={dest.id}
-                      type="button"
-                      onClick={() => setDestination(dest.name)}
-                      className={`relative rounded-xl overflow-hidden border-2 ${destination === dest.name ? 'border-teal-500 shadow-md' : 'border-transparent'} group`}
-                    >
-                      <div className="aspect-[4/3] relative">
-                        <img src={dest.image} alt={dest.name} className="h-full w-full object-cover group-hover:scale-105 transition" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                        <span className="absolute bottom-2 left-2 text-xs font-semibold text-white">{dest.name}</span>
-                        {destination === dest.name && (
-                          <span className="absolute top-2 right-2 bg-teal-500 rounded-full p-1">
-                            <MapPin className="h-3 w-3 text-white" />
-                          </span>
-                        )}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-3 relative">
-                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                  <input
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    placeholder="Custom destination"
-                    className="w-full border border-gray-300 rounded-md py-2 pl-9 pr-3 text-sm"
-                  />
-                </div>
-              </>
-            ) : (
-              <div className="space-y-3">
-                <div className="relative">
-                  <Search className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                  <input
-                    value={destination}
-                    onChange={(e) => setDestination(e.target.value)}
-                    placeholder="Search place for posting request (e.g., Goa, Jaipur)"
-                    className="w-full border border-gray-300 rounded-md py-2 pl-9 pr-3 text-sm"
-                  />
-                </div>
-
-                <div className="rounded-xl border border-gray-200 overflow-hidden">
-                  <iframe
-                    title="Place map preview"
-                    src={mapEmbedUrl}
-                    className="w-full h-64"
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                </div>
-
-                <p className="text-xs text-gray-500 inline-flex items-center">
-                  <MapPin className="h-3 w-3 mr-1" /> Searched place will be used for your post and shown in discover cards.
-                </p>
-              </div>
-            )}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {destinations.slice(0, 8).map((dest) => (
+                <button
+                  key={dest.id}
+                  type="button"
+                  onClick={() => setDestination(dest.name)}
+                  aria-pressed={destination === dest.name}
+                  className={`relative rounded-xl overflow-hidden border-2 ${destination === dest.name ? 'border-cyan-500 shadow-md shadow-cyan-400/25' : 'border-transparent'} group`}
+                >
+                  <div className="aspect-[4/3] relative">
+                    <img src={dest.image} alt={dest.name} className="h-full w-full object-cover group-hover:scale-105 transition" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                    <span className="absolute bottom-2 left-2 text-xs font-semibold text-white">{dest.name}</span>
+                    {destination === dest.name && (
+                      <span className="absolute top-2 right-2 bg-cyan-600 rounded-full p-1">
+                        <MapPin className="h-3 w-3 text-white" />
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="mt-3 relative">
+              <Search className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
+              <input
+                value={destination}
+                onChange={(e) => setDestination(e.target.value)}
+                placeholder="Custom destination"
+                className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+              />
+            </div>
           </div>
 
-          <div className="grid md:grid-cols-5 gap-3">
+          <div className="grid md:grid-cols-4 gap-3">
             <div>
               <label className="text-xs text-gray-500">Start</label>
               <div className="relative">
                 <Calendar className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border rounded-md py-2 pl-9 pr-3 text-sm" />
+                <input type="date" min={todayStr} value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
             </div>
             <div>
               <label className="text-xs text-gray-500">End</label>
               <div className="relative">
                 <Calendar className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                <input type="date" min={startDate} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border rounded-md py-2 pl-9 pr-3 text-sm" />
+                <input type="date" min={startDate || todayStr} value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
               </div>
             </div>
             <div>
               <label className="text-xs text-gray-500">Budget</label>
               <div className="relative">
                 <Wallet className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                <select value={budget} onChange={(e) => setBudget(e.target.value as Trip['budget'])} className="w-full border rounded-md py-2 pl-9 pr-3 text-sm bg-white">
+                <select value={budget} onChange={(e) => setBudget(e.target.value as Trip['budget'])} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors">
                   <option>Low</option>
                   <option>Medium</option>
                   <option>High</option>
@@ -325,68 +210,48 @@ export default function FindCompanionPage() {
               <label className="text-xs text-gray-500">Trip Type</label>
               <div className="relative">
                 <Route className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                <select value={travelType} onChange={(e) => setTravelType(e.target.value as Trip['travelType'])} className="w-full border rounded-md py-2 pl-9 pr-3 text-sm bg-white">
+                <select value={travelType} onChange={(e) => setTravelType(e.target.value as Trip['travelType'])} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors">
                   <option>Leisure</option>
                   <option>Adventure</option>
                   <option>Backpacking</option>
                   <option>Business</option>
+                  <option>Standard</option>
+                  <option>Luxury</option>
                 </select>
               </div>
             </div>
-            {mode === 'post' && (
-              <div>
-                <label className="text-xs text-gray-500">Companions</label>
-                <div className="relative">
-                  <Users className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
-                  <input
-                    type="number"
-                    min={1}
-                    max={10}
-                    value={companionsNeeded}
-                    onChange={(e) => setCompanionsNeeded(Number(e.target.value))}
-                    className="w-full border rounded-md py-2 pl-9 pr-3 text-sm"
-                  />
-                </div>
-              </div>
-            )}
           </div>
 
-          {mode === 'post' && (
-            <textarea
-              rows={3}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes: preferences, stay style, plan highlights..."
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-            />
-          )}
-
-          {(postError || validationErrors.length > 0) && (
-            <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 text-sm text-red-700">
-              {postError || validationErrors[0]}
+          {(formError || validationErrors.length > 0) && (
+            <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 text-sm text-red-700">
+              {formError || validationErrors[0]}
             </div>
           )}
-          {postSuccess && <div className="bg-green-50 border border-green-200 rounded-md px-3 py-2 text-sm text-green-700">{postSuccess}</div>}
 
-          <button className="inline-flex items-center px-4 py-2 rounded-md text-sm font-medium text-white bg-teal-600 hover:bg-teal-700">
-            {mode === 'discover' ? <Search className="h-4 w-4 mr-2" /> : <PlusCircle className="h-4 w-4 mr-2" />}
-            {mode === 'discover' ? 'Find Companions' : 'Post Request'}
+          <button
+            disabled={isMatching}
+            className="inline-flex items-center px-6 py-3 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-700 hover:to-sky-800 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:-translate-y-0.5 transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
+          >
+            <Search className="h-4 w-4 mr-2" />
+            {isMatching ? 'Finding...' : 'Find Companions'}
           </button>
         </form>
       </div>
 
-      {mode === 'discover' && matchSummary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="Candidates" value={matchSummary.totalCandidates.toString()} />
-          <StatCard title="Eligible" value={matchSummary.eligibleAfterFiltering.toString()} />
-          <StatCard title="Recommended" value={stats.recommended.toString()} accent="text-emerald-600" />
-          <StatCard title="Matched" value={stats.matched.toString()} accent="text-teal-600" />
+      {matchSummary && (
+        <div className="grid grid-cols-3 gap-4 stagger-children">
+          <StatCard title="Candidates" value={matchSummary.totalCandidates.toString()} icon="users" />
+          <StatCard title="Eligible" value={matchSummary.eligibleAfterFiltering.toString()} icon="check" />
+          <StatCard title="Recommended" value={stats.recommended.toString()} accent="text-cyan-700" icon="sparkle" />
         </div>
       )}
 
-      {mode === 'discover' && <div className="space-y-4">
+      <div className="space-y-5">
         <h2 className="text-xl font-bold text-gray-900 flex items-center">
-          <Sparkles className="h-5 w-5 text-teal-600 mr-2" /> Ranked Matches
+          <div className="p-1.5 bg-gradient-to-br from-cyan-600 to-sky-700 rounded-lg mr-2">
+            <Sparkles className="h-4 w-4 text-white" />
+          </div>
+          Ranked Matches
         </h2>
 
         {isMatching ? (
@@ -395,125 +260,54 @@ export default function FindCompanionPage() {
               <MatchCardSkeleton key={i} />
             ))}
           </div>
-        ) : matches.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {matches.map((match) => (
+        ) : recommendedMatches.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
+            {recommendedMatches.map((match) => (
               <CompanionCard key={match.matchId} match={match} />
             ))}
           </div>
         ) : !hasSearched ? (
-          <div className="text-center py-10 bg-white rounded-xl border border-gray-200">
-            <p className="text-gray-700 font-medium">Ready to discover companions.</p>
+          <div className="text-center py-12 glass-panel elevated-card rounded-2xl border border-white/40">
+            <div className="p-3 bg-cyan-50 rounded-2xl inline-block mb-3"><Search className="h-6 w-6 text-cyan-600" /></div>
+            <p className="text-gray-700 font-semibold">Ready to discover companions</p>
             <p className="text-gray-500 text-sm mt-1">Fill trip details and click Find Companions.</p>
           </div>
         ) : matchError ? (
-          <div className="text-center py-10 bg-red-50 rounded-xl border border-red-200">
-            <p className="text-red-700 font-medium">Something went wrong</p>
+          <div className="text-center py-12 bg-red-50/80 backdrop-blur-sm rounded-2xl border border-red-200/60">
+            <p className="text-red-700 font-semibold">Something went wrong</p>
             <p className="text-red-600 text-sm mt-1">{matchError}</p>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="mt-3 px-4 py-2 text-sm bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition"
+              className="mt-4 px-5 py-2.5 text-sm bg-gradient-to-r from-cyan-600 to-sky-700 text-white rounded-xl hover:shadow-lg shadow-cyan-500/25 transition-all font-medium"
             >
               Refresh &amp; Retry
             </button>
           </div>
         ) : (
-          <div className="text-center py-10 bg-white rounded-xl border border-gray-200">
-            <p className="text-gray-700 font-medium">No recommendations yet.</p>
+          <div className="text-center py-12 glass-panel elevated-card rounded-2xl border border-white/40">
+            <div className="p-3 bg-gray-100 rounded-2xl inline-block mb-3"><Users className="h-6 w-6 text-gray-400" /></div>
+            <p className="text-gray-700 font-semibold">No recommendations yet</p>
             <p className="text-gray-500 text-sm mt-1">Set trip details and run matching to get results.</p>
-            <p className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 px-3 py-1 rounded-full mt-3">
+            <p className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-4 py-1.5 rounded-full mt-3">
               <Info size={13} /> Destination + Date overlap + Interests + Budget + Style
             </p>
           </div>
         )}
-      </div>}
-
-      {mode === 'discover' && <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900 inline-flex items-center">
-          <MapPin className="h-5 w-5 text-teal-600 mr-2" /> Community Place Requests
-        </h2>
-
-        <div className="flex flex-wrap gap-2">
-          {(['All', 'Leisure', 'Adventure', 'Backpacking', 'Business'] as const).map((chip) => (
-            <button
-              key={chip}
-              type="button"
-              onClick={() => handleFilterChange(chip)}
-              className={`px-3 py-1.5 rounded-full text-xs border transition ${
-                requestFilter === chip
-                  ? 'bg-teal-100 text-teal-800 border-teal-200'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-              }`}
-            >
-              {chip}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          {pagedRequests.map((request) => (
-            <div key={request.requestId} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-              <div className="h-40 relative">
-                <img src={request.placeImage} alt={request.destination} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                <p className="absolute bottom-2 left-3 font-semibold text-white">{request.destination}</p>
-              </div>
-
-              <div className="p-4">
-                <div className="flex justify-between items-start">
-                  <p className="text-xs text-gray-500">by {request.userName}</p>
-                  <span className="text-xs bg-teal-50 text-teal-700 px-2 py-1 rounded-full">{request.travelType}</span>
-                </div>
-                <p className="text-sm text-gray-600 mt-2">{request.startDate} to {request.endDate}</p>
-                <p className="text-sm text-gray-600">Budget: {request.budget} • Need: {request.companionsNeeded} people</p>
-                <p className="text-sm text-gray-700 mt-2">{request.notes}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {filteredRequests.length === 0 && (
-          <div className="text-sm text-gray-500 bg-white border border-gray-200 rounded-lg p-4">
-            No requests found for the selected filter.
-          </div>
-        )}
-
-        {filteredRequests.length > REQUEST_PAGE_SIZE && (
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-gray-500">
-              Page {requestPage} of {totalRequestPages}
-            </p>
-            <div className="inline-flex gap-2">
-              <button
-                type="button"
-                onClick={() => setRequestPage((prev) => Math.max(1, prev - 1))}
-                disabled={requestPage === 1}
-                className="px-3 py-1.5 text-xs border rounded-md bg-white disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                onClick={() => setRequestPage((prev) => Math.min(totalRequestPages, prev + 1))}
-                disabled={requestPage === totalRequestPages}
-                className="px-3 py-1.5 text-xs border rounded-md bg-white disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
-      </div>}
+      </div>
     </div>
   );
 }
 
-function StatCard({ title, value, accent }: { title: string; value: string; accent?: string }) {
+function StatCard({ title, value, accent, icon }: { title: string; value: string; accent?: string; icon?: string }) {
+  const iconBg = icon === 'heart' ? 'from-pink-500 to-rose-500' : icon === 'sparkle' ? 'from-cyan-500 to-sky-700' : icon === 'check' ? 'from-blue-500 to-indigo-600' : 'from-gray-500 to-gray-600';
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
-      <p className="text-xs text-gray-500">{title}</p>
-      <p className={`text-2xl font-bold text-gray-900 ${accent ?? ''}`}>{value}</p>
+    <div className="glass-panel elevated-card border border-white/40 rounded-2xl p-4 hover:shadow-md transition-all duration-300 card-hover-glow">
+      <div className="flex items-center gap-2 mb-1">
+        <div className={`w-2.5 h-2.5 rounded-full bg-gradient-to-r ${iconBg} shadow-sm`} />
+        <p className="text-xs text-gray-500 font-medium">{title}</p>
+      </div>
+      <p className={`text-2xl font-bold text-gray-900 ${accent ?? ''} animate-count-up`}>{value}</p>
     </div>
   );
 }

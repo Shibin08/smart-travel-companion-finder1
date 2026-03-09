@@ -1,9 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import React, { lazy, Suspense } from 'react';
 import type { ReactNode } from 'react';
+import { GoogleOAuthProvider } from '@react-oauth/google';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider } from './context/AppContext';
 import Layout from './components/Layout';
+
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 // ── Error Boundary ────────────────────────────────────────────
 class ErrorBoundary extends React.Component<
@@ -17,18 +20,20 @@ class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
-          <h1 className="text-2xl font-bold text-gray-800">Something went wrong</h1>
-          <p className="text-gray-500 mt-2">An unexpected error occurred.</p>
-          <button
-            onClick={() => {
-              this.setState({ hasError: false });
-              window.location.href = '/';
-            }}
-            className="mt-4 px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700"
-          >
-            Return Home
-          </button>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-white to-violet-50/30 px-4">
+          <div className="glass-panel elevated-card border border-gray-200/60 p-10 text-center max-w-md">
+            <h1 className="text-2xl font-bold text-gray-800">Something went wrong</h1>
+            <p className="text-gray-500 mt-2">An unexpected error occurred.</p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false });
+                window.location.href = '/';
+              }}
+              className="mt-4 px-5 py-2.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-medium hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5"
+            >
+              Return Home
+            </button>
+          </div>
         </div>
       );
     }
@@ -46,12 +51,17 @@ const ChatPage = lazy(() => import('./pages/ChatPage'));
 const ConversationsPage = lazy(() => import('./pages/ConversationsPage'));
 const ReviewsPage = lazy(() => import('./pages/ReviewsPage'));
 const MatchesPage = lazy(() => import('./pages/MatchesPage'));
+const OpenTripsPage = lazy(() => import('./pages/OpenTripsPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 // Suspense fallback spinner
 const PageLoader = () => (
-  <div className="flex items-center justify-center py-24">
-    <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600" />
+  <div className="flex flex-col items-center justify-center py-24 gap-3">
+    <div className="relative">
+      <div className="h-11 w-11 rounded-full border-2 border-violet-200 border-t-violet-600 animate-spin" />
+      <div className="absolute inset-2 rounded-full bg-violet-100/70 shimmer" />
+    </div>
+    <p className="text-sm text-gray-500">Loading your travel dashboard...</p>
   </div>
 );
 
@@ -75,6 +85,7 @@ const LoginRedirect = ({ children }: { children: ReactNode }) => {
 
 export default function App() {
   return (
+    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
     <AuthProvider>
       <AppProvider>
         <BrowserRouter>
@@ -155,6 +166,14 @@ export default function App() {
               </ProtectedRoute>
             } />
 
+            <Route path="/open-trips" element={
+              <ProtectedRoute>
+                <Layout>
+                  <OpenTripsPage />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
           </Suspense>
@@ -162,5 +181,6 @@ export default function App() {
         </BrowserRouter>
       </AppProvider>
     </AuthProvider>
+    </GoogleOAuthProvider>
   );
 }

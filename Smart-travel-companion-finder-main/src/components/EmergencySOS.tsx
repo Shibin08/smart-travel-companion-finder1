@@ -36,8 +36,26 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
   const [selectedAlertType, setSelectedAlertType] = useState<EmergencyAlert['alertType']>('SOS');
   const [customMessage, setCustomMessage] = useState('');
   const [showInstructions, setShowInstructions] = useState(false);
+  const [browserLocation, setBrowserLocation] = useState<{ latitude: number; longitude: number; address: string } | null>(null);
 
   const TOKEN_STORAGE_KEY = 'tcf_token';
+
+  // Request browser geolocation on mount
+  useEffect(() => {
+    if (!currentLocation && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setBrowserLocation({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            address: `${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`,
+          });
+        },
+        () => { /* permission denied or unavailable — keep null */ },
+        { enableHighAccuracy: true, timeout: 10000 },
+      );
+    }
+  }, [currentLocation]);
 
   const mapBackendAlert = (alert: BackendEmergencyAlert): EmergencyAlert => ({
     alertId: String(alert.alert_id),
@@ -128,7 +146,7 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
         alert_type: selectedAlertType,
         message: customMessage.trim() || `${selectedAlertType} emergency reported by ${userId}`,
         severity: selectedAlertType === 'SOS' ? 'Critical' : selectedAlertType === 'Medical' ? 'High' : 'Medium',
-        location: currentLocation ?? {
+        location: currentLocation ?? browserLocation ?? {
           latitude: 0,
           longitude: 0,
           address: 'Location unavailable',
@@ -188,13 +206,15 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
   const instructions = getInstructions(selectedAlertType);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-slide-up">
       {/* Emergency SOS Button */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-6 shadow-sm card-hover-glow">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900 flex items-center">
-              <Shield className="h-6 w-6 text-red-600 mr-2" />
+              <div className="p-1.5 bg-red-100 rounded-lg mr-2">
+                <Shield className="h-5 w-5 text-red-600" />
+              </div>
               Emergency SOS
             </h2>
             <p className="text-sm text-gray-500 mt-1">
@@ -203,14 +223,14 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
           </div>
           <button
             onClick={() => setShowInstructions(!showInstructions)}
-            className="text-sm text-teal-600 hover:text-teal-700"
+            className="text-sm text-cyan-600 hover:text-cyan-700"
           >
             {showInstructions ? 'Hide' : 'Show'} Instructions
           </button>
         </div>
 
         {showInstructions && (
-          <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="mb-4 p-4 bg-blue-50/80 rounded-xl border border-blue-200/60">
             <h3 className="font-semibold text-blue-900 mb-2">Emergency Instructions:</h3>
             <ul className="space-y-1 text-sm text-blue-800">
               {instructions.map((instruction, index) => (
@@ -231,14 +251,14 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
                 setSelectedAlertType(type);
                 setShowConfirmDialog(true);
               }}
-              className={`p-4 rounded-lg border-2 transition-all ${
+              className={`p-4 rounded-xl border-2 transition-all duration-200 hover:-translate-y-0.5 ${
                 type === 'SOS'
-                  ? 'border-red-300 bg-red-50 hover:bg-red-100'
-                  : 'border-gray-200 bg-white hover:bg-gray-50'
+                  ? 'border-red-300 bg-red-50/80 hover:bg-red-100 hover:shadow-md hover:shadow-red-200/40'
+                  : 'border-gray-200/60 bg-white hover:bg-gray-50 hover:shadow-md hover:shadow-gray-200/40'
               }`}
             >
               <div className="flex flex-col items-center space-y-2">
-                <div className={`p-2 rounded-full ${
+                <div className={`p-2.5 rounded-xl ${
                   type === 'SOS' ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600'
                 }`}>
                   {getAlertIcon(type)}
@@ -250,7 +270,7 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
         </div>
 
         {currentLocation && (
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+          <div className="mt-4 p-3 bg-gray-50/80 rounded-xl">
             <div className="flex items-center text-sm text-gray-600">
               <Navigation className="h-4 w-4 mr-2" />
               Current: {currentLocation.address}
@@ -261,9 +281,9 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
 
       {/* Active Alerts */}
       {activeAlerts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-6 shadow-sm card-hover-glow animate-slide-up-delay">
           <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-            <Bell className="h-5 w-5 text-red-600 mr-2" />
+            <Bell className="h-5 w-5 text-red-600 mr-2 animate-pulse" />
             Active Emergency Alerts ({activeAlerts.length})
           </h3>
           
@@ -271,7 +291,7 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
             {activeAlerts.map((alert) => (
               <div
                 key={alert.alertId}
-                className={`p-4 rounded-lg border ${getSeverityColor(alert.severity)}`}
+                className={`p-4 rounded-xl border ${getSeverityColor(alert.severity)}`}
               >
                 <div className="flex items-start justify-between">
                   <div className="flex items-start space-x-3">
@@ -312,12 +332,12 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
 
       {/* User Alert History */}
       {userAlerts.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+        <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-6 shadow-sm card-hover-glow animate-slide-up-delay-2">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Your Emergency History</h3>
           
           <div className="space-y-3">
             {userAlerts.slice(0, 5).map((alert) => (
-              <div key={alert.alertId} className="p-3 bg-gray-50 rounded-lg">
+              <div key={alert.alertId} className="p-3.5 bg-gray-50/80 rounded-xl">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     {getAlertIcon(alert.alertType)}
@@ -342,10 +362,10 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
 
       {/* Confirmation Dialog */}
       {showConfirmDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-gray-100">
             <div className="flex items-center mb-4">
-              <div className="p-3 bg-red-100 rounded-full mr-3">
+              <div className="p-3 bg-red-100 rounded-xl mr-3">
                 {getAlertIcon(selectedAlertType)}
               </div>
               <div>
@@ -366,7 +386,7 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
                 value={customMessage}
                 onChange={(e) => setCustomMessage(e.target.value)}
                 placeholder="Provide more details about your emergency..."
-                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
                 rows={3}
               />
             </div>
@@ -374,17 +394,17 @@ export default function EmergencySOS({ userId, currentLocation }: EmergencySOSPr
             <div className="flex space-x-3">
               <button
                 onClick={() => setShowConfirmDialog(false)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleTriggerEmergency}
                 disabled={isTriggering}
-                className={`flex-1 px-4 py-2 rounded-md text-sm font-medium text-white ${
+                className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white shadow-lg transition-all ${
                   selectedAlertType === 'SOS'
-                    ? 'bg-red-600 hover:bg-red-700'
-                    : 'bg-orange-600 hover:bg-orange-700'
+                    ? 'bg-gradient-to-r from-red-600 to-rose-600 shadow-red-500/25 hover:shadow-red-500/40'
+                    : 'bg-gradient-to-r from-orange-600 to-amber-600 shadow-orange-500/25 hover:shadow-orange-500/40'
                 } disabled:opacity-50`}
               >
                 {isTriggering ? 'Triggering...' : `Trigger ${selectedAlertType}`}

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from auth import get_current_user
 from database import get_db
-from models import EmergencyAlert, User
+from models import EmergencyAlert, Match, User
 from schemas import (
     EmergencyAlertCreate,
     EmergencyAlertListResponse,
@@ -47,9 +47,31 @@ def list_active_alerts(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # Build set of user IDs the current user is allowed to see alerts from:
+    # themselves + users they have an accepted match with
+    from sqlalchemy import or_
+    matched_rows = (
+        db.query(Match)
+        .filter(
+            Match.status == "accepted",
+            or_(
+                Match.user1_id == current_user.user_id,
+                Match.user2_id == current_user.user_id,
+            ),
+        )
+        .all()
+    )
+    allowed_ids = {current_user.user_id}
+    for m in matched_rows:
+        allowed_ids.add(m.user1_id)
+        allowed_ids.add(m.user2_id)
+
     alerts = (
         db.query(EmergencyAlert)
-        .filter(EmergencyAlert.status.in_(["Active", "Acknowledged"]))
+        .filter(
+            EmergencyAlert.status.in_(["Active", "Acknowledged"]),
+            EmergencyAlert.user_id.in_(allowed_ids),
+        )
         .order_by(EmergencyAlert.created_at.desc())
         .all()
     )
