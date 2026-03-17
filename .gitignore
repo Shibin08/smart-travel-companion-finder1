@@ -30,10 +30,9 @@ uploads/
 
 # Node
 node_modules/
-package-lock.json
 
 # Test scripts (not part of the app)
-test_*.py
+/test_*.py
 check_users.py
 migrate_db.py
 update_genders.py
