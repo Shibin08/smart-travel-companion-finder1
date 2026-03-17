@@ -14,15 +14,18 @@ All queries use SQLAlchemy sessions - no pandas or CSV.
 
 from __future__ import annotations
 
+from datetime import date as _date
+from datetime import datetime as _dt
 import re
 from typing import TYPE_CHECKING
 
-from models import Match, User
+from models import Match, Review, User
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
+from sqlalchemy.exc import IntegrityError
 
 
 # Utility helpers
@@ -30,10 +33,28 @@ from sqlalchemy import or_
 # Values that represent "no destination set" - treated as empty
 _NO_DEST = {"", "not set", "none", "null", "n/a"}
 
+# Canonical travel-style aliases to keep strict filtering and scoring
+# consistent with frontend labels and dataset values.
+_STYLE_ALIASES = {
+    "backpacking": "backpacker",
+    "standard": "leisure",
+}
+
+_TEST_USER_ID_PREFIXES = ("qc", "smoke", "pw_")
+_TEST_NAME_PREFIXES = ("qc ", "smoke ", "pw ")
+
 
 def _norm(value) -> str:
     """Lower-case strip helper."""
     return str(value).strip().lower() if value else ""
+
+
+def _canon_style(value) -> str:
+    """Normalize travel-style labels to canonical values."""
+    style = _norm(value)
+    if not style:
+        return ""
+    return _STYLE_ALIASES.get(style, style)
 
 
 def _to_float(value) -> float:
@@ -50,6 +71,20 @@ def _to_float(value) -> float:
         except ValueError:
             return 0.0
     return 0.0
+
+
+def _budget_band(value) -> str:
+    """Map numeric/string budget to low/medium/high band."""
+    amount = _to_float(value)
+    if amount <= 0:
+        return ""
+    if amount < 7000:
+        return "low"
+    # Keep these thresholds aligned with frontend budget labels
+    # (>=9000 is shown as High in the UI).
+    if amount < 9000:
+        return "medium"
+    return "high"
 
 
 def _jaccard(set1: set, set2: set) -> float:
@@ -81,7 +116,7 @@ _STYLE_SIM: dict[tuple[str, str], float] = {
 
 def _style_similarity(s1: str, s2: str) -> float:
     """Return 0.0-1.0 similarity between two travel styles."""
-    a, b = _norm(s1), _norm(s2)
+    a, b = _canon_style(s1), _canon_style(s2)
     if not a or not b:
         return 0.2  # unknown style -> minimal credit
     if a == b:
@@ -142,6 +177,247 @@ def _age_proximity(age1, age2) -> float:
     gap = abs(a1 - a2)
     # Linear decay: 0 gap -> 1.0, 20+ gap -> 0.0
     return max(1.0 - gap / 20.0, 0.0)
+
+
+def _coerce_to_date(value):
+    """Best-effort conversion of ORM/string date values to ``date``."""
+    if value is None:
+        return None
+    if isinstance(value, _dt):
+        return value.date()
+    if isinstance(value, _date):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        for parser in (
+            lambda v: _dt.fromisoformat(v).date(),
+            lambda v: _dt.strptime(v, "%Y-%m-%d").date(),
+            lambda v: _dt.strptime(v, "%d-%m-%Y").date(),
+            lambda v: _dt.strptime(v, "%Y-%m-%d %H:%M:%S").date(),
+        ):
+            try:
+                return parser(text)
+            except ValueError:
+                continue
+    return None
+
+
+def _is_trip_completed_for_pair(end_date_1, end_date_2) -> bool:
+    """Return True only when both users have ended their trips (<= today)."""
+    d1 = _coerce_to_date(end_date_1)
+    d2 = _coerce_to_date(end_date_2)
+    if d1 is None or d2 is None:
+        return False
+    today = _date.today()
+    return d1 <= today and d2 <= today
+
+
+def _end_chat_available_on(end_date_1, end_date_2):
+    """Return the date when end-chat becomes available for both users."""
+    d1 = _coerce_to_date(end_date_1)
+    d2 = _coerce_to_date(end_date_2)
+    if d1 is None or d2 is None:
+        return None
+    return max(d1, d2)
+
+
+_BIO_TRAITS = [
+    "calm",
+    "curious",
+    "steady",
+    "vibrant",
+    "friendly",
+    "bold",
+    "mindful",
+    "social",
+    "open",
+    "joyful",
+    "grounded",
+    "active",
+    "relaxed",
+    "thoughtful",
+    "creative",
+    "easygoing",
+    "adaptable",
+    "focused",
+    "spirited",
+    "warm",
+    "confident",
+    "balanced",
+    "flexible",
+    "positive",
+    "energetic",
+]
+
+_BIO_MODES = [
+    "planner",
+    "explorer",
+    "navigator",
+    "story-seeker",
+    "culture-fan",
+    "route-builder",
+    "trip-partner",
+    "sunrise-chaser",
+    "mountain-lover",
+    "foodie-traveler",
+    "city-walker",
+    "weekend-drifter",
+    "itinerary-pro",
+    "adventure-friend",
+    "budget-smart traveler",
+    "comfort-first traveler",
+    "local-guide vibe",
+    "nature-first traveler",
+    "museum-hopper",
+    "coastal wanderer",
+    "photowalk fan",
+    "slow-travel fan",
+    "group-trip friend",
+    "solo-to-group traveler",
+    "sunset-hunter",
+]
+
+
+def _split_interests(raw_value) -> list[str]:
+    if raw_value is None:
+        return []
+    raw_items = [item.strip() for item in re.split(r"[|,]", str(raw_value)) if item.strip()]
+    unique_items: list[str] = []
+    seen: set[str] = set()
+    for item in raw_items:
+        key = _norm(item)
+        if key and key not in seen:
+            seen.add(key)
+            unique_items.append(item)
+    return unique_items
+
+
+def _stable_user_index(user_id: str) -> int:
+    match = re.search(r"(\d+)$", str(user_id or ""))
+    if match:
+        return max(int(match.group(1)) - 1, 0)
+    # Deterministic fallback when user_id has no numeric suffix.
+    return sum((idx + 1) * ord(ch) for idx, ch in enumerate(str(user_id or "")))
+
+
+def _bio_signature(user_id: str) -> str:
+    idx = _stable_user_index(user_id)
+    trait = _BIO_TRAITS[idx % len(_BIO_TRAITS)]
+    mode = _BIO_MODES[(idx // len(_BIO_TRAITS)) % len(_BIO_MODES)]
+    return f"{trait} {mode}"
+
+
+def _display_location(user: User) -> str:
+    city = str(user.current_city or "").strip()
+    if city and _norm(city) not in {"unknown", "abroad"}:
+        return city
+    country = str(user.home_country or "").strip()
+    if country and _norm(country) not in _NO_DEST:
+        return country
+    return "India"
+
+
+def _build_unique_bio(user: User) -> str:
+    idx = _stable_user_index(user.user_id)
+    style = str(user.travel_style or "").strip() or "Travel"
+    style_lower = style.lower()
+    location = _display_location(user)
+    interests = _split_interests(user.interests)
+    if len(interests) >= 2:
+        interests_text = f"{interests[0].lower()} and {interests[1].lower()}"
+    elif len(interests) == 1:
+        interests_text = interests[0].lower()
+    else:
+        interests_text = "new places"
+
+    destination = str(user.destination or "").strip()
+    destination_text = (
+        destination if destination and _norm(destination) not in _NO_DEST else "new destinations"
+    )
+    signature_suffix = _signature_suffix(user.user_id)
+    style_article = "an" if style_lower[:1] in {"a", "e", "i", "o", "u"} else "a"
+
+    variants = [
+        f"{style} trips are the favorite here. Based in {location}, usually exploring {interests_text}. Next plan: {destination_text}. {signature_suffix}",
+        f"From {location}, this {style_lower} traveler enjoys {interests_text} and likes clear plans for {destination_text}. {signature_suffix}",
+        f"{location} based and always ready for {destination_text}. Into {interests_text} with a {style_lower} travel vibe. {signature_suffix}",
+        f"{style} profile from {location}. Most excited about {interests_text}; currently planning {destination_text}. {signature_suffix}",
+        f"Trips centered around {interests_text} are always a plus. Traveling from {location} with {style_article} {style_lower} approach, heading toward {destination_text}. {signature_suffix}",
+        f"{destination_text} is on the radar. {location} traveler who prefers {style_lower} plans and enjoys {interests_text}. {signature_suffix}",
+        f"Plans trips with a {style_lower} style from {location}. Favorite themes: {interests_text}. Next stop: {destination_text}. {signature_suffix}",
+        f"{location} traveler, {style_lower} at heart. Enjoys {interests_text} and is lining up a {destination_text} trip. {signature_suffix}",
+    ]
+    return variants[idx % len(variants)]
+
+
+def _signature_suffix(user_id: str) -> str:
+    idx = _stable_user_index(user_id)
+    signature = _bio_signature(user_id)
+    suffixes = [
+        f"Travel vibe: {signature}.",
+        f"Usually brings {signature} energy.",
+        f"Known among friends for the {signature} style.",
+        f"Trip mood: {signature}.",
+        f"People describe this traveler as {signature}.",
+        f"Road style: {signature}.",
+    ]
+    return suffixes[idx % len(suffixes)]
+
+
+def _display_bio(user: User) -> str:
+    _ = user
+    return "Travel companion profile."
+
+
+def _is_internal_test_user(user: User) -> bool:
+    """Hide local smoke/QC test accounts from recommendation results."""
+    user_id = _norm(user.user_id)
+    name = _norm(user.name)
+    email = _norm(user.email)
+
+    if user_id.startswith(_TEST_USER_ID_PREFIXES):
+        return True
+    if name.startswith(_TEST_NAME_PREFIXES):
+        return True
+    if email.endswith("@example.com") and (
+        user_id.startswith(_TEST_USER_ID_PREFIXES)
+        or name.startswith(_TEST_NAME_PREFIXES)
+    ):
+        return True
+    return False
+
+
+def _get_public_review_stats(db: "Session", user_ids: list[str]) -> dict[str, dict[str, float | int]]:
+    """Return public review aggregates keyed by reviewee user_id."""
+    if not user_ids:
+        return {}
+
+    rows = (
+        db.query(
+            Review.reviewee_id,
+            func.avg(Review.rating).label("avg_rating"),
+            func.count(Review.review_id).label("review_count"),
+        )
+        .filter(
+            Review.reviewee_id.in_(user_ids),
+            Review.is_public == True,
+        )
+        .group_by(Review.reviewee_id)
+        .all()
+    )
+
+    stats: dict[str, dict[str, float | int]] = {}
+    for reviewee_id, avg_rating, review_count in rows:
+        count = int(review_count or 0)
+        avg = round(float(avg_rating), 1) if avg_rating is not None else 0.0
+        stats[reviewee_id] = {
+            "avg": avg,
+            "count": count,
+        }
+
+    return stats
 
 
 # Scoring
@@ -235,7 +511,7 @@ def find_matches(
     current_user: User,
     db: "Session",
     top_n: int = 100,
-    min_score: float = 30.0,
+    min_score: float = 35.0,
     trip_override: dict | None = None,
 ) -> list[dict]:
     """Find the best travel companions from the database.
@@ -246,7 +522,8 @@ def find_matches(
         top_n: Number of top results to return (default 100).
         min_score: Minimum compatibility score to include.
         trip_override: Optional dict with search-time trip parameters
-            (destination, start_date, end_date, budget_range, travel_style)
+            (destination, start_date, end_date, budget_range, travel_style,
+            strict_filters)
             that override the user's stored profile for this search.
 
     Returns:
@@ -289,16 +566,35 @@ def find_matches(
         query = query.filter(User.destination.ilike(search_dest))
 
     candidates = query.all()
+    review_stats_by_user = _get_public_review_stats(
+        db,
+        [candidate.user_id for candidate in candidates],
+    )
 
     # Hard date-overlap filter: when the searcher specifies dates,
     # skip candidates whose dates don't overlap at all. This is what
     # makes adding 2 extra travel days actually change the match list.
     has_dates = user_dict.get("start_date") and user_dict.get("end_date")
+    strict_filters = bool(user_dict.get("strict_filters"))
+    search_style = _canon_style(user_dict.get("travel_style"))
+    search_budget_band = _budget_band(user_dict.get("budget_range"))
 
     results: list[dict] = []
 
     for candidate in candidates:
+        if _is_internal_test_user(candidate):
+            continue
+
         cand_dict = _user_to_dict(candidate)
+
+        if strict_filters:
+            candidate_style = _canon_style(cand_dict.get("travel_style"))
+            if search_style and candidate_style != search_style:
+                continue
+
+            candidate_budget_band = _budget_band(cand_dict.get("budget_range"))
+            if search_budget_band and candidate_budget_band != search_budget_band:
+                continue
 
         # Exclude candidates with confirmed zero date overlap
         if has_dates:
@@ -313,6 +609,7 @@ def find_matches(
 
         score_data = calculate_score(user_dict, cand_dict)
         if score_data["overall"] >= min_score:
+            review_stats = review_stats_by_user.get(candidate.user_id)
             results.append(
                 {
                     "user_id": candidate.user_id,
@@ -334,7 +631,9 @@ def find_matches(
                     "budget_range": candidate.budget_range,
                     "home_country": candidate.home_country,
                     "current_city": candidate.current_city,
-                    "bio": candidate.bio,
+                    "bio": _display_bio(candidate),
+                    "review_avg_rating": review_stats["avg"] if review_stats else None,
+                    "review_count": int(review_stats["count"]) if review_stats else 0,
                 }
             )
 
@@ -388,7 +687,23 @@ def store_match(
         status="pending",
     )
     db.add(new_match)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Another request may have created the same pair concurrently.
+        db.rollback()
+        existing = (
+            db.query(Match)
+            .filter(
+                ((Match.user1_id == user1_id) & (Match.user2_id == user2_id))
+                | ((Match.user1_id == user2_id) & (Match.user2_id == user1_id))
+            )
+            .first()
+        )
+        if existing:
+            return existing, False
+        raise
+
     db.refresh(new_match)
     return new_match, True
 
@@ -404,6 +719,9 @@ def get_user_matches(
     """
     from models import Match, User
     from sqlalchemy import or_
+
+    current_user = db.query(User).filter(User.user_id == current_user_id).first()
+    current_user_end_date = current_user.end_date if current_user else None
 
     rows = (
         db.query(Match, User)
@@ -424,15 +742,34 @@ def get_user_matches(
         .order_by(Match.created_at.desc())
         .all()
     )
+    review_stats_by_user = _get_public_review_stats(
+        db,
+        [other_user.user_id for _, other_user in rows],
+    )
 
     results: list[dict] = []
     for match, other_user in rows:
+        review_stats = review_stats_by_user.get(other_user.user_id)
+        trip_completed = _is_trip_completed_for_pair(
+            current_user_end_date,
+            other_user.end_date,
+        )
+        can_current_user_end_chat = match.status == "accepted" and trip_completed
+        end_chat_available_on = _end_chat_available_on(
+            current_user_end_date,
+            other_user.end_date,
+        )
         results.append(
             {
                 "match_id": match.match_id,
                 "compatibility_score": match.compatibility_score,
                 "status": match.status,
                 "created_at": match.created_at,
+                "requested_by_current_user": match.user1_id == current_user_id,
+                "can_current_user_accept": match.status == "pending" and match.user2_id == current_user_id,
+                "trip_completed": trip_completed,
+                "can_current_user_end_chat": can_current_user_end_chat,
+                "end_chat_available_on": end_chat_available_on.isoformat() if end_chat_available_on else None,
                 "other_user": {
                     "user_id": other_user.user_id,
                     "name": other_user.name,
@@ -444,7 +781,9 @@ def get_user_matches(
                     "budget_range": other_user.budget_range,
                     "home_country": other_user.home_country,
                     "current_city": other_user.current_city,
-                    "bio": other_user.bio,
+                    "bio": _display_bio(other_user),
+                    "review_avg_rating": review_stats["avg"] if review_stats else None,
+                    "review_count": int(review_stats["count"]) if review_stats else 0,
                 },
             }
         )
@@ -487,12 +826,32 @@ def update_match_status(
     if current_user_id not in (match.user1_id, match.user2_id):
         raise ValueError("You are not part of this match")
 
+    # Only the receiver (user2) can accept an incoming pending request.
+    if match.status == "pending" and new_status == "accepted" and current_user_id != match.user2_id:
+        raise ValueError("Only the request recipient can accept this match")
+
     # Enforce valid state transitions
     allowed = ALLOWED_TRANSITIONS.get(match.status, set())
     if new_status not in allowed:
         raise ValueError(
             f"Cannot transition from '{match.status}' to '{new_status}'"
         )
+
+    # End-chat guard: accepted -> cancelled only after both trips are completed.
+    if match.status == "accepted" and new_status == "cancelled":
+        user_rows = (
+            db.query(User.user_id, User.end_date)
+            .filter(User.user_id.in_([match.user1_id, match.user2_id]))
+            .all()
+        )
+        end_dates = {uid: end_date for uid, end_date in user_rows}
+        if not _is_trip_completed_for_pair(
+            end_dates.get(match.user1_id),
+            end_dates.get(match.user2_id),
+        ):
+            raise ValueError(
+                "End chat is allowed only after both travelers complete the trip"
+            )
 
     match.status = new_status
     db.commit()

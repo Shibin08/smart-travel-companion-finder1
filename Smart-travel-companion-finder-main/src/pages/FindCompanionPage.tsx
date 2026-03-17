@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Calendar,
   Info,
@@ -20,55 +20,110 @@ import { destinations } from '../data/destinations';
 import CompanionCard from '../components/CompanionCard';
 import MatchCardSkeleton from '../components/MatchCardSkeleton';
 
+const ELIGIBLE_SCORE_THRESHOLD = 55;
+const RECOMMENDED_SCORE_THRESHOLD = 70;
+const LAST_FIND_SEARCH_KEY = 'tcf_last_find_search_v1';
+
+type CandidateTier = 'candidate' | 'eligible' | 'recommended';
+type PersistedSearchState = {
+  destination: string;
+  startDate: string;
+  endDate: string;
+  budget: Trip['budget'];
+  travelType: Trip['travelType'];
+};
+
+const readPersistedSearchState = (): Partial<PersistedSearchState> => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(LAST_FIND_SEARCH_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Partial<PersistedSearchState>;
+    const travelType = parsed.travelType;
+    const budget = parsed.budget;
+    const safeTravelType: Trip['travelType'] | undefined =
+      travelType === 'Leisure' || travelType === 'Adventure' || travelType === 'Backpacker' || travelType === 'Luxury'
+        ? travelType
+        : undefined;
+    const safeBudget: Trip['budget'] | undefined =
+      budget === 'Low' || budget === 'Medium' || budget === 'High'
+        ? budget
+        : undefined;
+    return {
+      destination: typeof parsed.destination === 'string' ? parsed.destination : undefined,
+      startDate: typeof parsed.startDate === 'string' ? parsed.startDate : undefined,
+      endDate: typeof parsed.endDate === 'string' ? parsed.endDate : undefined,
+      budget: safeBudget,
+      travelType: safeTravelType,
+    };
+  } catch {
+    return {};
+  }
+};
+
+const formatInputDate = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export default function FindCompanionPage() {
-  const { user } = useAuth();
+  const { user, updateProfile } = useAuth();
   const {
     currentTrip,
     createTrip,
     matches,
     generateMatches,
-    matchSummary,
     matchError,
     validationErrors,
     isMatching,
   } = useApp();
 
-  const [destination, setDestination] = useState(currentTrip?.destination ?? 'Goa');
+  const persistedSearch = useMemo(() => readPersistedSearchState(), []);
+  const [destination, setDestination] = useState(currentTrip?.destination ?? persistedSearch.destination ?? 'Goa');
   const defaultStart = new Date();
   const defaultEnd = new Date(defaultStart); defaultEnd.setDate(defaultEnd.getDate() + 5);
-  const [startDate, setStartDate] = useState(currentTrip?.startDate ?? defaultStart.toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(currentTrip?.endDate ?? defaultEnd.toISOString().split('T')[0]);
-  const [budget, setBudget] = useState<Trip['budget']>(currentTrip?.budget ?? 'Medium');
-  const [travelType, setTravelType] = useState<Trip['travelType']>(currentTrip?.travelType ?? 'Leisure');
+  const [startDate, setStartDate] = useState(currentTrip?.startDate ?? persistedSearch.startDate ?? formatInputDate(defaultStart));
+  const [endDate, setEndDate] = useState(currentTrip?.endDate ?? persistedSearch.endDate ?? formatInputDate(defaultEnd));
+  const [budget, setBudget] = useState<Trip['budget']>(currentTrip?.budget ?? persistedSearch.budget ?? 'Medium');
+  const [travelType, setTravelType] = useState<Trip['travelType']>(currentTrip?.travelType ?? persistedSearch.travelType ?? 'Leisure');
 
   const [formError, setFormError] = useState('');
   const [hasSearched, setHasSearched] = useState(false);
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const formContainerRef = useRef<HTMLDivElement | null>(null);
+  const destinationInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => { document.title = 'Find Companion - TravelMatch'; }, []);
 
-  // Only show new recommendations on this page (exclude already connected/pending)
-  const recommendedMatches = useMemo(() =>
-    matches.filter((m) => m.matchStatus === 'Recommended'),
-  [matches]);
+  // Show search candidates in ranked list (exclude connected/pending items).
+  const candidateMatches = useMemo(
+    () =>
+      matches
+        .filter((m) => m.matchStatus !== 'Matched' && m.matchStatus !== 'Pending')
+        .sort((a, b) => b.score - a.score),
+    [matches],
+  );
+  const hasVisibleRecommendations = hasSearched || candidateMatches.length > 0;
 
   const stats = useMemo(() => {
-    const recommended = recommendedMatches.length;
-    return { recommended };
-  }, [recommendedMatches]);
+    const candidates = candidateMatches.length;
+    const eligible = candidateMatches.filter((m) => m.score >= ELIGIBLE_SCORE_THRESHOLD).length;
+    const recommended = candidateMatches.filter((m) => m.score >= RECOMMENDED_SCORE_THRESHOLD).length;
+    return { candidates, eligible, recommended };
+  }, [candidateMatches]);
+
+  const getCandidateTier = (score: number): CandidateTier => {
+    if (score >= RECOMMENDED_SCORE_THRESHOLD) return 'recommended';
+    if (score >= ELIGIBLE_SCORE_THRESHOLD) return 'eligible';
+    return 'candidate';
+  };
 
   const showToast = (type: 'success' | 'error', message: string) => {
     setToast({ type, message });
     window.setTimeout(() => setToast(null), 2200);
   };
-
-  useEffect(() => {
-    if (currentTrip && matches.length === 0 && user) {
-      setHasSearched(true);
-      generateMatches();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentTrip, matches.length, user]);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -83,7 +138,91 @@ export default function FindCompanionPage() {
     return '';
   };
 
-  const handleFindCompanions = (e: React.FormEvent) => {
+  const persistSearchState = (trip: Trip) => {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(
+      LAST_FIND_SEARCH_KEY,
+      JSON.stringify({
+        destination: trip.destination,
+        startDate: trip.startDate,
+        endDate: trip.endDate,
+        budget: trip.budget,
+        travelType: trip.travelType,
+      } satisfies PersistedSearchState),
+    );
+  };
+
+  const runSearch = async (trip: Trip) => {
+    if (!createTrip(trip)) return;
+    setHasSearched(true);
+    persistSearchState(trip);
+    const synced = await updateProfile({
+      destination: trip.destination,
+      matchingStartDate: trip.startDate,
+      matchingEndDate: trip.endDate,
+      profile: {
+        budget: trip.budget,
+        travelStyle: trip.travelType,
+      },
+    });
+    if (!synced) {
+      showToast(
+        'error',
+        'Trip details were used for search, but profile sync failed. Please retry once.',
+      );
+    }
+    generateMatches(trip);
+  };
+
+  const focusTripFilters = () => {
+    formContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => destinationInputRef.current?.focus(), 180);
+  };
+
+  const handleTryNearbyDates = () => {
+    if (!user) return;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      showToast('error', 'Set valid start and end dates first.');
+      return;
+    }
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const nextStartDate = new Date(start);
+    nextStartDate.setDate(nextStartDate.getDate() - 2);
+    if (nextStartDate < today) {
+      nextStartDate.setTime(today.getTime());
+    }
+
+    const nextEndDate = new Date(end);
+    nextEndDate.setDate(nextEndDate.getDate() + 2);
+    if (nextEndDate < nextStartDate) {
+      nextEndDate.setDate(nextStartDate.getDate() + 1);
+    }
+
+    const nextStart = formatInputDate(nextStartDate);
+    const nextEnd = formatInputDate(nextEndDate);
+
+    setStartDate(nextStart);
+    setEndDate(nextEnd);
+    setFormError('');
+    showToast('success', 'Trying nearby dates (+/- 2 days).');
+    const trip: Trip = {
+      tripId: Date.now().toString(),
+      userId: user.userId,
+      destination,
+      startDate: nextStart,
+      endDate: nextEnd,
+      budget,
+      travelType,
+      status: 'Planning',
+    };
+    void runSearch(trip);
+  };
+
+  const handleFindCompanions = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
 
@@ -106,10 +245,7 @@ export default function FindCompanionPage() {
       status: 'Planning',
     };
 
-    if (createTrip(trip)) {
-      setHasSearched(true);
-      generateMatches(trip);
-    }
+    await runSearch(trip);
   };
 
   return (
@@ -143,7 +279,7 @@ export default function FindCompanionPage() {
         </div>
       </div>
 
-      <div className="glass-panel elevated-card rounded-2xl border border-white/50 p-6 sm:p-8 animate-slide-up-delay">
+      <div ref={formContainerRef} className="glass-panel elevated-card rounded-2xl border border-white/50 p-6 sm:p-8 animate-slide-up-delay">
         <form onSubmit={handleFindCompanions} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Destination</label>
@@ -172,6 +308,7 @@ export default function FindCompanionPage() {
             <div className="mt-3 relative">
               <Search className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
               <input
+                ref={destinationInputRef}
                 value={destination}
                 onChange={(e) => setDestination(e.target.value)}
                 placeholder="Custom destination"
@@ -213,9 +350,7 @@ export default function FindCompanionPage() {
                 <select value={travelType} onChange={(e) => setTravelType(e.target.value as Trip['travelType'])} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors">
                   <option>Leisure</option>
                   <option>Adventure</option>
-                  <option>Backpacking</option>
-                  <option>Business</option>
-                  <option>Standard</option>
+                  <option>Backpacker</option>
                   <option>Luxury</option>
                 </select>
               </div>
@@ -238,10 +373,10 @@ export default function FindCompanionPage() {
         </form>
       </div>
 
-      {matchSummary && (
+      {hasVisibleRecommendations && (
         <div className="grid grid-cols-3 gap-4 stagger-children">
-          <StatCard title="Candidates" value={matchSummary.totalCandidates.toString()} icon="users" />
-          <StatCard title="Eligible" value={matchSummary.eligibleAfterFiltering.toString()} icon="check" />
+          <StatCard title="Candidates" value={stats.candidates.toString()} icon="users" />
+          <StatCard title="Eligible" value={stats.eligible.toString()} icon="check" />
           <StatCard title="Recommended" value={stats.recommended.toString()} accent="text-cyan-700" icon="sparkle" />
         </div>
       )}
@@ -260,17 +395,32 @@ export default function FindCompanionPage() {
               <MatchCardSkeleton key={i} />
             ))}
           </div>
-        ) : recommendedMatches.length > 0 ? (
+        ) : candidateMatches.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 stagger-children">
-            {recommendedMatches.map((match) => (
-              <CompanionCard key={match.matchId} match={match} />
+            {candidateMatches.map((match) => (
+              <CompanionCard
+                key={match.matchId}
+                match={match}
+                highlightTier={getCandidateTier(match.score)}
+                onConnectSuccess={(name) => showToast('success', `Request sent to ${name}. Status: Pending.`)}
+                onConnectError={(message) => showToast('error', message)}
+              />
             ))}
           </div>
-        ) : !hasSearched ? (
+        ) : !hasVisibleRecommendations ? (
           <div className="text-center py-12 glass-panel elevated-card rounded-2xl border border-white/40">
             <div className="p-3 bg-cyan-50 rounded-2xl inline-block mb-3"><Search className="h-6 w-6 text-cyan-600" /></div>
             <p className="text-gray-700 font-semibold">Ready to discover companions</p>
             <p className="text-gray-500 text-sm mt-1">Fill trip details and click Find Companions.</p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={focusTripFilters}
+                className="px-4 py-2 text-sm font-medium text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-xl hover:bg-cyan-100 transition-colors"
+              >
+                Edit Trip Filters
+              </button>
+            </div>
           </div>
         ) : matchError ? (
           <div className="text-center py-12 bg-red-50/80 backdrop-blur-sm rounded-2xl border border-red-200/60">
@@ -292,6 +442,23 @@ export default function FindCompanionPage() {
             <p className="inline-flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-4 py-1.5 rounded-full mt-3">
               <Info size={13} /> Destination + Date overlap + Interests + Budget + Style
             </p>
+            <div className="mt-4 flex flex-wrap justify-center gap-2">
+              <button
+                type="button"
+                onClick={focusTripFilters}
+                className="px-4 py-2 text-sm font-medium text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-xl hover:bg-cyan-100 transition-colors"
+              >
+                Edit Trip Filters
+              </button>
+              <button
+                type="button"
+                onClick={handleTryNearbyDates}
+                disabled={isMatching}
+                className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-cyan-600 to-sky-700 rounded-xl hover:shadow-lg hover:shadow-cyan-500/25 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+              >
+                Try Nearby Dates
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -311,3 +478,4 @@ function StatCard({ title, value, accent, icon }: { title: string; value: string
     </div>
   );
 }
+

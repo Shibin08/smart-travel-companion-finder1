@@ -1,34 +1,62 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { Match } from '../types';
-import { Heart, MessageCircle, MapPin, CalendarDays, Wallet, TrendingUp, AlertCircle, CheckCircle, Star, Users, Navigation } from 'lucide-react';
+import {
+  Heart,
+  MessageCircle,
+  MapPin,
+  CalendarDays,
+  Wallet,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Star,
+  Users,
+  Navigation,
+  CircleHelp,
+} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 import UserAvatar from './UserAvatar';
 
+type HighlightTier = 'candidate' | 'eligible' | 'recommended';
+
 interface CompanionCardProps {
   match: Match;
+  highlightTier?: HighlightTier;
+  onConnectSuccess?: (name: string) => void;
+  onConnectError?: (message: string) => void;
 }
 
-export default function CompanionCard({ match }: CompanionCardProps) {
+export default function CompanionCard({
+  match,
+  highlightTier = 'candidate',
+  onConnectSuccess,
+  onConnectError,
+}: CompanionCardProps) {
   const navigate = useNavigate();
   const { updateMatchStatus } = useApp();
   const { user, score, matchDetails, compatibilityScore } = match;
   const [isConnecting, setIsConnecting] = useState(false);
+  const [requestSent, setRequestSent] = useState(match.matchStatus === 'Pending');
 
-  // Color coding based on score
-  const scoreColor = score >= 80 ? 'bg-green-100 text-green-800 border-green-200' :
-    score >= 60 ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-      'bg-red-100 text-red-800 border-red-200';
+  const scoreColor =
+    score >= 80
+      ? 'bg-green-100 text-green-800 border-green-200'
+      : score >= 60
+        ? 'bg-yellow-100 text-yellow-800 border-yellow-200'
+        : 'bg-red-100 text-red-800 border-red-200';
 
   const budgetPill =
     matchDetails.budgetCompatibility === 'High'
-      ? 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200'
+      ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
       : matchDetails.budgetCompatibility === 'Medium'
         ? 'bg-amber-50 text-amber-700 border-amber-200'
         : 'bg-rose-50 text-rose-700 border-rose-200';
 
-  const getCompatibilityIcon = (component: keyof typeof compatibilityScore.components) => {
+  const getCompatibilityIcon = (
+    component: keyof typeof compatibilityScore.components,
+  ) => {
     const value = compatibilityScore.components[component];
     if (value >= 0.8) return <CheckCircle className="h-3 w-3 text-green-600" />;
     if (value >= 0.5) return <TrendingUp className="h-3 w-3 text-yellow-600" />;
@@ -38,10 +66,48 @@ export default function CompanionCard({ match }: CompanionCardProps) {
   const formatCompatibilityValue = (value: number) => {
     return Math.round(value * 100);
   };
+  const isConnected = match.matchStatus === 'Matched';
+  const isPending = match.matchStatus === 'Pending' || requestSent;
+
+  useEffect(() => {
+    setRequestSent(match.matchStatus === 'Pending');
+  }, [match.matchStatus]);
+
+  const whyMatchHighlights: string[] = [];
+  if (compatibilityScore.components.interestSimilarity >= 0.6) whyMatchHighlights.push('shared interests');
+  if (compatibilityScore.components.scheduleOverlap >= 0.5) whyMatchHighlights.push('date overlap');
+  if (compatibilityScore.components.budgetCompatibility >= 0.6) whyMatchHighlights.push('budget fit');
+  if (compatibilityScore.components.travelStyleMatch >= 0.6) whyMatchHighlights.push('travel style fit');
+  const whyMatchText =
+    whyMatchHighlights.length > 0
+      ? `Strong points: ${whyMatchHighlights.join(', ')}.`
+      : 'Based on destination, dates, budget, travel style, interests, and age proximity.';
+
+  const tierCardStyle =
+    highlightTier === 'recommended'
+      ? 'ring-2 ring-cyan-300/80 border-cyan-400/80 shadow-cyan-500/20'
+      : highlightTier === 'eligible'
+        ? 'ring-1 ring-blue-200/80 border-blue-300/80'
+        : 'border-gray-200/60 hover:border-cyan-300/70';
+
+  const tierChipStyle =
+    highlightTier === 'recommended'
+      ? 'bg-cyan-100 text-cyan-800 border-cyan-300'
+      : highlightTier === 'eligible'
+        ? 'bg-blue-100 text-blue-800 border-blue-300'
+        : '';
+
+  const tierLabel =
+    highlightTier === 'recommended'
+      ? 'Recommended'
+      : highlightTier === 'eligible'
+        ? 'Eligible'
+        : null;
 
   return (
-    <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-md overflow-hidden flex flex-col h-full border border-gray-200/60 hover:border-violet-200/60 group card-hover-glow gradient-border">
-      {/* Header with Image and Score */}
+    <div
+      className={`bg-white/80 backdrop-blur-sm rounded-2xl shadow-md overflow-hidden flex flex-col h-full border group card-hover-glow gradient-border transition-all duration-200 ${tierCardStyle}`}
+    >
       <div className="relative h-48 overflow-hidden">
         <UserAvatar
           src={user.photoUrl}
@@ -50,14 +116,15 @@ export default function CompanionCard({ match }: CompanionCardProps) {
           aria-label={`Photo of ${user.name}`}
         />
         <div className="absolute top-2 right-2">
-          <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold border backdrop-blur-md shadow-sm ${scoreColor}`}>
+          <div
+            className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold border backdrop-blur-md shadow-sm ${scoreColor}`}
+          >
             <Star className="h-3 w-3 mr-1 fill-current" />
             {score}% Match
           </div>
         </div>
-        
-        {/* Common Interests Badge */}
-        {(matchDetails.interestMatch.length > 0) && (
+
+        {matchDetails.interestMatch.length > 0 && (
           <div className="absolute bottom-2 left-2 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded-md">
             <p className="text-white text-xs font-medium flex items-center gap-1">
               <Heart size={12} className="text-pink-400 fill-pink-400" />
@@ -65,93 +132,152 @@ export default function CompanionCard({ match }: CompanionCardProps) {
             </p>
           </div>
         )}
-        
-        {/* Verification Badge */}
+
         {user.verificationStatus === 'Verified' && (
           <div className="absolute top-2 left-2 bg-blue-600 text-white px-2 py-1 rounded-full flex items-center">
             <svg className="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              <path
+                fillRule="evenodd"
+                d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clipRule="evenodd"
+              />
             </svg>
             <span className="text-xs font-medium">Verified</span>
           </div>
         )}
       </div>
 
-      {/* User Info */}
       <div className="p-4 flex flex-col flex-grow">
         <div className="flex justify-between items-start">
           <div className="flex-1">
             <h3 className="text-lg font-bold text-gray-900 flex items-center">
               {user.name}
-              {user.stats.averageRating > 0 && (
+              {user.stats.reviewsReceived > 0 && user.stats.averageRating > 0 && (
                 <div className="flex items-center ml-2">
                   <Star className="h-4 w-4 text-yellow-400 fill-current" />
-                  <span className="text-sm text-gray-600 ml-1">{user.stats.averageRating.toFixed(1)}</span>
+                  <span className="text-sm text-gray-600 ml-1">
+                    {user.stats.averageRating.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-gray-500 ml-1">
+                    ({user.stats.reviewsReceived})
+                  </span>
                 </div>
               )}
             </h3>
-            <p className="text-sm text-gray-500">{user.age} • {user.gender} • {user.currentCity}</p>
+            <p className="text-sm text-gray-500">
+              {user.age} {'\u2022'} {user.gender} {'\u2022'} {user.currentCity}
+            </p>
+            {tierLabel && (
+              <span
+                className={`mt-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border ${tierChipStyle}`}
+              >
+                {tierLabel}
+              </span>
+            )}
+            {isConnected && (
+              <span className="mt-2 ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border bg-emerald-100 text-emerald-800 border-emerald-300">
+                Connected
+              </span>
+            )}
           </div>
         </div>
 
         <p className="mt-3 text-sm text-gray-600 line-clamp-2">{user.bio}</p>
 
-        {/* Travel Preferences */}
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
             {user.profile.travelStyle}
           </span>
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${budgetPill}`}>
+          <span
+            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${budgetPill}`}
+          >
             <Wallet size={12} className="mr-1" />
             {user.profile.budget} Budget
           </span>
         </div>
 
-        {/* Compatibility Breakdown */}
         <div className="mt-4 p-3.5 bg-gray-50/80 rounded-xl border border-gray-100/60">
-          <h4 className="text-xs font-semibold text-gray-700 mb-2 flex items-center">
-            <TrendingUp className="h-3 w-3 mr-1" />
-            Compatibility Breakdown
-          </h4>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h4 className="text-xs font-semibold text-gray-700 flex items-center">
+              <TrendingUp className="h-3 w-3 mr-1" />
+              Compatibility Breakdown
+            </h4>
+            <div className="relative group/why">
+              <button
+                type="button"
+                className="rounded-full p-1 text-gray-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors"
+                aria-label="Why this match"
+              >
+                <CircleHelp className="h-3.5 w-3.5" />
+              </button>
+              <div className="pointer-events-none absolute right-0 top-6 z-20 w-56 rounded-lg bg-gray-900 px-2.5 py-2 text-[11px] leading-relaxed text-white shadow-lg opacity-0 transition-opacity duration-150 group-hover/why:opacity-100">
+                {whyMatchText}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Interests</span>
               <div className="flex items-center">
                 {getCompatibilityIcon('interestSimilarity')}
-                <span className="ml-1 font-medium">{formatCompatibilityValue(compatibilityScore.components.interestSimilarity)}%</span>
+                <span className="ml-1 font-medium">
+                  {formatCompatibilityValue(
+                    compatibilityScore.components.interestSimilarity,
+                  )}
+                  %
+                </span>
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Budget</span>
               <div className="flex items-center">
                 {getCompatibilityIcon('budgetCompatibility')}
-                <span className="ml-1 font-medium">{formatCompatibilityValue(compatibilityScore.components.budgetCompatibility)}%</span>
+                <span className="ml-1 font-medium">
+                  {formatCompatibilityValue(
+                    compatibilityScore.components.budgetCompatibility,
+                  )}
+                  %
+                </span>
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Schedule</span>
               <div className="flex items-center">
                 {getCompatibilityIcon('scheduleOverlap')}
-                <span className="ml-1 font-medium">{formatCompatibilityValue(compatibilityScore.components.scheduleOverlap)}%</span>
+                <span className="ml-1 font-medium">
+                  {formatCompatibilityValue(
+                    compatibilityScore.components.scheduleOverlap,
+                  )}
+                  %
+                </span>
               </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-gray-600">Location</span>
               <div className="flex items-center">
                 {matchDetails.locationProximity === 'Same City' ? (
-                  <><Navigation className="h-3 w-3 text-green-600 mr-1" /><span className="font-medium">Same City</span></>
+                  <>
+                    <Navigation className="h-3 w-3 text-green-600 mr-1" />
+                    <span className="font-medium">Same City</span>
+                  </>
                 ) : matchDetails.locationProximity === 'Nearby' ? (
-                  <><Navigation className="h-3 w-3 text-yellow-600 mr-1" /><span className="font-medium">Nearby</span></>
+                  <>
+                    <Navigation className="h-3 w-3 text-yellow-600 mr-1" />
+                    <span className="font-medium">Nearby</span>
+                  </>
                 ) : (
-                  <><Navigation className="h-3 w-3 text-gray-400 mr-1" /><span className="font-medium">Different</span></>
+                  <>
+                    <Navigation className="h-3 w-3 text-gray-400 mr-1" />
+                    <span className="font-medium">Different</span>
+                  </>
                 )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Strengths and Concerns */}
-        {(compatibilityScore.strengths.length > 0 || compatibilityScore.concerns.length > 0) && (
+        {(compatibilityScore.strengths.length > 0 ||
+          compatibilityScore.concerns.length > 0) && (
           <div className="mt-3 space-y-1">
             {compatibilityScore.strengths.slice(0, 2).map((strength, index) => (
               <div key={index} className="flex items-center text-xs text-green-700">
@@ -168,52 +294,81 @@ export default function CompanionCard({ match }: CompanionCardProps) {
           </div>
         )}
 
-        {/* Trip Details */}
         <div className="mt-3 text-xs text-gray-500 space-y-1">
           <div className="flex items-center justify-between">
-            <span className="flex items-center"><MapPin size={12} className="mr-1" />{user.currentCity}</span>
-            <span className="flex items-center"><CalendarDays size={12} className="mr-1" />{matchDetails.dateOverlap ? 'Dates Match' : 'Limited Overlap'}</span>
+            <span className="flex items-center">
+              <MapPin size={12} className="mr-1" />
+              {user.currentCity}
+            </span>
+            <span className="flex items-center">
+              <CalendarDays size={12} className="mr-1" />
+              {matchDetails.dateOverlap ? 'Dates Match' : 'Limited Overlap'}
+            </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="flex items-center"><Users size={12} className="mr-1" />{user.stats.tripsCompleted} trips</span>
-            <span className="flex items-center">{user.stats.responseRate}% response rate</span>
+            <span className="flex items-center">
+              <Users size={12} className="mr-1" />
+              {user.stats.tripsCompleted} trips
+            </span>
+            <span className="flex items-center">
+              {user.stats.responseRate}% response rate
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
       <div className="p-4 bg-gray-50/60 border-t border-gray-100/60 grid grid-cols-2 gap-3">
         <button
           onClick={() => navigate(`/match/${match.matchId}`)}
-          className="flex items-center justify-center px-4 py-2.5 border border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-violet-200 hover:-translate-y-0.5 transition-all duration-200"
+          className="flex items-center justify-center px-4 py-2.5 border border-gray-200 shadow-sm text-sm font-semibold rounded-xl text-gray-700 bg-white hover:bg-gray-50 hover:border-cyan-300 hover:-translate-y-0.5 transition-all duration-200"
         >
           View Profile
         </button>
         {match.matchStatus === 'Matched' ? (
           <button
             onClick={() => navigate(`/chat/${match.matchId}`)}
-            className="flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5 transition-all duration-200"
+            className="flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl text-white bg-gradient-to-r from-cyan-600 to-teal-600 hover:shadow-lg hover:shadow-cyan-500/25 hover:-translate-y-0.5 transition-all duration-200"
           >
             <MessageCircle size={16} className="mr-2" />
             Chat
+          </button>
+        ) : isPending ? (
+          <button
+            disabled
+            className="flex items-center justify-center px-4 py-2.5 border border-amber-200 shadow-sm text-sm font-semibold rounded-xl text-amber-700 bg-amber-50 cursor-not-allowed"
+          >
+            Pending
           </button>
         ) : (
           <button
             onClick={async () => {
               if (!match.chatEnabled) return;
               setIsConnecting(true);
-              await updateMatchStatus(match.matchId, 'Matched');
-              setIsConnecting(false);
+              setRequestSent(true);
+              try {
+                const updated = await updateMatchStatus(match.matchId, 'Pending');
+                if (updated) {
+                  onConnectSuccess?.(user.name);
+                } else {
+                  setRequestSent(false);
+                  onConnectError?.('Could not connect right now. Please try again.');
+                }
+              } catch {
+                setRequestSent(false);
+                onConnectError?.('Could not connect right now. Please try again.');
+              } finally {
+                setIsConnecting(false);
+              }
             }}
             disabled={!match.chatEnabled || isConnecting}
             className={`flex items-center justify-center px-4 py-2.5 border border-transparent shadow-sm text-sm font-semibold rounded-xl transition-all ${
               match.chatEnabled
-                ? 'text-white bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:shadow-lg hover:shadow-violet-500/25 hover:-translate-y-0.5'
+                ? 'text-white bg-gradient-to-r from-cyan-600 to-teal-600 hover:shadow-lg hover:shadow-cyan-500/25 hover:-translate-y-0.5'
                 : 'text-gray-400 bg-gray-200 cursor-not-allowed'
             }`}
           >
             <MessageCircle size={16} className="mr-2" />
-            {isConnecting ? 'Connecting...' : match.chatEnabled ? 'Connect' : 'Score Too Low'}
+            {isConnecting ? 'Sending...' : match.chatEnabled ? 'Connect' : 'Score Too Low'}
           </button>
         )}
       </div>

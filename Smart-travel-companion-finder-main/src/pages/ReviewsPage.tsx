@@ -36,10 +36,14 @@ export default function ReviewsPage() {
 
     try {
       const result = await fetchMatches(token);
-      setMatches(result.matches);
-      if (result.matches.length > 0) {
-        setSelectedMatch((prev) => prev ?? result.matches[0]);
-      }
+      const acceptedMatches = result.matches.filter((item) => item.status === 'accepted');
+      setMatches(acceptedMatches);
+      setSelectedMatch((prev) => {
+        if (prev && acceptedMatches.some((item) => item.match_id === prev.match_id)) {
+          return prev;
+        }
+        return acceptedMatches[0] ?? null;
+      });
     } catch {
       setError('Unable to load matched companions from backend.');
     } finally {
@@ -168,7 +172,7 @@ export default function ReviewsPage() {
       {isLoadingMatches ? <ReviewSkeleton /> : <div className="bg-white/80 backdrop-blur-sm rounded-2xl border border-gray-200/60 p-6 shadow-sm space-y-4">
         <h2 className="text-lg font-bold text-gray-900">Select matched traveler</h2>
         {matches.length === 0 ? (
-          <p className="text-sm text-gray-500">No matched travelers found yet.</p>
+          <p className="text-sm text-gray-500">No connected travelers found yet.</p>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {matches.map((match) => (

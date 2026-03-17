@@ -9,10 +9,15 @@ import { devLog, devWarn, devError } from '../utils/devLogger';
 const TOKEN_STORAGE_KEY = 'tcf_token';
 
 const normalizeTravelStyle = (value?: string | null): User['profile']['travelStyle'] => {
+    if (value === 'Backpacking') {
+        return 'Backpacker';
+    }
+    if (value === 'Standard') {
+        return 'Leisure';
+    }
     if (
-        value === 'Backpacking'
+        value === 'Backpacker'
         || value === 'Luxury'
-        || value === 'Standard'
         || value === 'Adventure'
         || value === 'Leisure'
         || value === 'Business'
@@ -28,9 +33,13 @@ interface AuthContextType {
     googleLogin: (credential: string) => Promise<boolean>;
     register: (email: string, password: string, name: string, gender?: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => void;
-    updateProfile: (profile: Partial<User>) => Promise<boolean>;
+    updateProfile: (profile: UserUpdatePayload) => Promise<boolean>;
     isAuthenticated: boolean;
 }
+
+type UserUpdatePayload = Omit<Partial<User>, 'profile'> & {
+    profile?: Partial<User['profile']>;
+};
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -130,6 +139,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     homeCountry: profile.home_country || 'India',
                     currentCity: profile.current_city || 'Unknown',
                     destination: profile.destination || undefined,
+                    matchingStartDate: profile.start_date || undefined,
+                    matchingEndDate: profile.end_date || undefined,
                     profile: {
                         budget: budgetLabel as 'Low' | 'Medium' | 'High',
                         travelStyle: normalizeTravelStyle(profile.travel_style),
@@ -214,6 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     homeCountry: profile.home_country || 'India',
                     currentCity: profile.current_city || 'Unknown',
                     destination: profile.destination || undefined,
+                    matchingStartDate: profile.start_date || undefined,
+                    matchingEndDate: profile.end_date || undefined,
                     profile: {
                         budget: budgetLabel as 'Low' | 'Medium' | 'High',
                         travelStyle: normalizeTravelStyle(profile.travel_style),
@@ -280,10 +293,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
     };
 
-    const updateProfile = async (updates: Partial<User>): Promise<boolean> => {
+    const updateProfile = async (updates: UserUpdatePayload): Promise<boolean> => {
         if (!user) return false;
 
-        const updatedUser = {
+        const updatedUser: User = {
             ...user,
             ...updates,
             profile: {
@@ -306,6 +319,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     current_city: updates.currentCity,
                     photo_url: updates.photoUrl !== undefined ? (updates.photoUrl || '') : undefined,
                     destination: updates.destination,
+                    start_date: updates.matchingStartDate,
+                    end_date: updates.matchingEndDate,
                     budget_range: updates.profile?.budget ? {
                         'Low': 5000,
                         'Medium': 8000,
@@ -340,3 +355,4 @@ export function useAuth() {
     }
     return context;
 }
+

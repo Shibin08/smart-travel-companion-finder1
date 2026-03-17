@@ -1,4 +1,4 @@
-import { differenceInCalendarDays, isAfter, isBefore, parseISO } from 'date-fns';
+import { isAfter, isBefore, parseISO } from 'date-fns';
 import type { Match, MatchSummary, Trip, User } from '../types';
 
 const WEIGHTS = {
@@ -32,10 +32,6 @@ export const validateTripInput = (trip: Trip): string[] => {
 
   if (isAfter(start, end)) {
     errors.push('Start date cannot be after end date.');
-  }
-
-  if (differenceInCalendarDays(end, start) > 30) {
-    errors.push('Trip duration should be 30 days or less for companion matching.');
   }
 
   return errors;

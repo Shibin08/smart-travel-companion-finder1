@@ -1,11 +1,38 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Compass, LogOut, Menu, X, ChevronDown, Star, Shield, MessageCircle, MapPin, Plane, Users, Route } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
+import { fetchConversations } from '../utils/apiClient';
 import SOSButton from './SOSButton';
 import UserAvatar from './UserAvatar';
 import { resolvePhoto } from '../utils/photoUtils';
+
+const TOKEN_STORAGE_KEY = 'tcf_token';
+const CHAT_SEEN_STORAGE_KEY = 'tcf_chat_seen_v1';
+
+const normalizeTimestamp = (value: string): string => (value.endsWith('Z') ? value : `${value}Z`);
+
+const readSeenMap = (): Record<string, string> => {
+  try {
+    const raw = localStorage.getItem(CHAT_SEEN_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+function NotificationBadge({ count }: { count: number }) {
+  const label = count > 99 ? '99+' : String(count);
+  return (
+    <span className="ml-1.5 inline-flex min-w-5 h-5 px-1 items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-bold leading-none ring-2 ring-white/80">
+      {label}
+    </span>
+  );
+}
 
 function NavLink({ to, children, className = '', onClick }: { to: string; children: ReactNode; className?: string; onClick?: () => void }) {
   const { pathname } = useLocation();
@@ -26,11 +53,24 @@ function NavLink({ to, children, className = '', onClick }: { to: string; childr
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
   const { user, logout } = useAuth();
+  const { matches } = useApp();
   const navigate = useNavigate();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [chatUnreadCount, setChatUnreadCount] = useState(0);
   const profileMenuRef = useRef<HTMLDivElement | null>(null);
+  const incomingRequestCount = matches.filter((match) => match.matchStatus === 'Pending' && match.pendingRole === 'received').length;
+
+  // Reset to top on route change before paint to avoid visible scroll jumps.
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const prevInlineBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    root.style.scrollBehavior = prevInlineBehavior;
+  }, [pathname]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -44,6 +84,74 @@ export default function Layout({ children }: { children: ReactNode }) {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setChatUnreadCount(0);
+      return;
+    }
+
+    let disposed = false;
+    const loadUnreadCount = async () => {
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!token) {
+        if (!disposed) setChatUnreadCount(0);
+        return;
+      }
+
+      try {
+        const conversations = await fetchConversations(token);
+        const seenMap = readSeenMap();
+        const unreadCount = conversations.reduce((count, item) => {
+          const lastMessageTime = normalizeTimestamp(item.last_message_timestamp);
+          const seenAt = seenMap[item.user_id];
+          const isUnread = !seenAt || new Date(lastMessageTime).getTime() > new Date(seenAt).getTime();
+          return isUnread ? count + 1 : count;
+        }, 0);
+        if (!disposed) setChatUnreadCount(unreadCount);
+      } catch {
+        if (!disposed) setChatUnreadCount(0);
+      }
+    };
+
+    void loadUnreadCount();
+    const intervalId = window.setInterval(() => {
+      void loadUnreadCount();
+    }, 15000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [user?.userId]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let disposed = false;
+    const refreshUnreadOnRouteChange = async () => {
+      const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+      if (!token) return;
+      try {
+        const conversations = await fetchConversations(token);
+        const seenMap = readSeenMap();
+        const unreadCount = conversations.reduce((count, item) => {
+          const lastMessageTime = normalizeTimestamp(item.last_message_timestamp);
+          const seenAt = seenMap[item.user_id];
+          const isUnread = !seenAt || new Date(lastMessageTime).getTime() > new Date(seenAt).getTime();
+          return isUnread ? count + 1 : count;
+        }, 0);
+        if (!disposed) setChatUnreadCount(unreadCount);
+      } catch {
+        if (!disposed) setChatUnreadCount(0);
+      }
+    };
+
+    void refreshUnreadOnRouteChange();
+    return () => {
+      disposed = true;
+    };
+  }, [pathname, user?.userId]);
 
   const handleLogout = () => {
     logout();
@@ -73,11 +181,13 @@ export default function Layout({ children }: { children: ReactNode }) {
                   </NavLink>
                   <NavLink to="/matches" className="px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-cyan-600 hover:bg-cyan-50/70 font-medium flex items-center gap-1.5">
                     <Users className="h-4 w-4" />
-                    Matches
+                    <span>Matches</span>
+                    {incomingRequestCount > 0 && <NotificationBadge count={incomingRequestCount} />}
                   </NavLink>
                   <NavLink to="/chat" className="px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-cyan-600 hover:bg-cyan-50/70 font-medium flex items-center gap-1.5">
                     <MessageCircle className="h-4 w-4" />
-                    Chat
+                    <span>Chat</span>
+                    {chatUnreadCount > 0 && <NotificationBadge count={chatUnreadCount} />}
                   </NavLink>
                   <NavLink to="/open-trips" className="px-3 py-2 rounded-lg text-sm text-gray-600 hover:text-cyan-600 hover:bg-cyan-50/70 font-medium flex items-center gap-1.5">
                     <Route className="h-4 w-4" />
@@ -167,10 +277,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                   <MapPin className="h-4 w-4" /> Discover
                 </NavLink>
                 <NavLink to="/matches" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-base font-medium text-gray-700 hover:bg-cyan-50">
-                  <Users className="h-4 w-4" /> Matches
+                  <Users className="h-4 w-4" /> <span>Matches</span> {incomingRequestCount > 0 && <NotificationBadge count={incomingRequestCount} />}
                 </NavLink>
                 <NavLink to="/chat" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-base font-medium text-gray-700 hover:bg-cyan-50">
-                  <MessageCircle className="h-4 w-4" /> Chat
+                  <MessageCircle className="h-4 w-4" /> <span>Chat</span> {chatUnreadCount > 0 && <NotificationBadge count={chatUnreadCount} />}
                 </NavLink>
                 <NavLink to="/open-trips" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-xl text-base font-medium text-gray-700 hover:bg-cyan-50">
                   <Route className="h-4 w-4" /> Open Trips

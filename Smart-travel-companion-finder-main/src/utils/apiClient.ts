@@ -37,6 +37,8 @@ export interface BackendRecommendMatch {
   home_country?: string;
   current_city?: string;
   bio?: string;
+  review_avg_rating?: number;
+  review_count?: number;
 }
 
 export interface BackendRecommendResponse {
@@ -56,6 +58,8 @@ export interface BackendMatchedUser {
   home_country?: string;
   current_city?: string;
   bio?: string;
+  review_avg_rating?: number;
+  review_count?: number;
 }
 
 export interface BackendMatchRecord {
@@ -63,6 +67,11 @@ export interface BackendMatchRecord {
   compatibility_score: number;
   status: 'pending' | 'accepted' | 'rejected' | 'cancelled';
   created_at: string;
+  requested_by_current_user?: boolean;
+  can_current_user_accept?: boolean;
+  trip_completed?: boolean;
+  can_current_user_end_chat?: boolean;
+  end_chat_available_on?: string | null;
   other_user: BackendMatchedUser;
 }
 
@@ -94,6 +103,49 @@ export interface BackendChatMessage {
   message_text: string;
   timestamp: string;
 }
+
+export interface BackendChatSocketConversation {
+  user_id: string;
+  name: string;
+  last_message: string;
+  last_message_timestamp: string;
+}
+
+export interface BackendChatSocketConnectedEvent {
+  type: 'connected';
+  user_id: string;
+}
+
+export interface BackendChatSocketMessageEvent {
+  type: 'chat_message';
+  message: BackendChatMessage;
+  conversation: BackendChatSocketConversation;
+  client_message_id?: string;
+}
+
+export interface BackendChatSocketErrorEvent {
+  type: 'error';
+  detail: string;
+  client_message_id?: string;
+}
+
+export interface BackendChatSocketTypingEvent {
+  type: 'typing';
+  sender_id: string;
+  receiver_id: string;
+  is_typing: boolean;
+}
+
+export interface BackendChatSocketPongEvent {
+  type: 'pong';
+}
+
+export type BackendChatSocketEvent =
+  | BackendChatSocketConnectedEvent
+  | BackendChatSocketMessageEvent
+  | BackendChatSocketErrorEvent
+  | BackendChatSocketTypingEvent
+  | BackendChatSocketPongEvent;
 
 export interface BackendPlaceRequest {
   request_id: number;
@@ -171,6 +223,16 @@ export interface BackendReviewList {
 }
 
 const buildUrl = (path: string) => `${API_BASE_URL}${path}`;
+
+export const buildChatWebSocketUrl = (token: string) => {
+  const url = new URL(API_BASE_URL);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  url.pathname = '/chat/ws';
+  url.search = '';
+  url.hash = '';
+  url.searchParams.set('token', token);
+  return url.toString();
+};
 
 /**
  * Wrapper around fetch that auto-detects 401 responses
@@ -375,7 +437,16 @@ export async function updateMatchStatusBackend(
   });
 
   if (!response.ok) {
-    throw new Error('Update match status request failed');
+    let detail = 'Update match status request failed';
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload?.detail) {
+        detail = payload.detail;
+      }
+    } catch {
+      // Keep default message when backend error payload is not JSON.
+    }
+    throw new Error(detail);
   }
 }
 

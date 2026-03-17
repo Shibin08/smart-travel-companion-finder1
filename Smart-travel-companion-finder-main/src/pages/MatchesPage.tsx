@@ -9,10 +9,12 @@ type TabFilter = 'all' | 'Matched' | 'Pending' | 'Rejected';
 
 export default function MatchesPage() {
   const { user } = useAuth();
-  const { matches, generateMatches, isMatching } = useApp();
+  const { matches, generateMatches, isMatching, updateMatchStatus } = useApp();
   const navigate = useNavigate();
   const [tab, setTab] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [updatingMatchId, setUpdatingMatchId] = useState<string | null>(null);
+  const [inlineError, setInlineError] = useState<Record<string, string>>({});
 
   useEffect(() => { document.title = 'My Matches - TravelMatch'; }, []);
 
@@ -61,6 +63,26 @@ export default function MatchesPage() {
       default:
         return null;
     }
+  };
+
+  const handleInlineAccept = async (matchId: string) => {
+    setUpdatingMatchId(matchId);
+    setInlineError((prev) => ({ ...prev, [matchId]: '' }));
+    const updated = await updateMatchStatus(matchId, 'Matched');
+    if (!updated) {
+      setInlineError((prev) => ({ ...prev, [matchId]: 'Could not accept right now. Please try again.' }));
+    }
+    setUpdatingMatchId(null);
+  };
+
+  const handleInlineReject = async (matchId: string) => {
+    setUpdatingMatchId(matchId);
+    setInlineError((prev) => ({ ...prev, [matchId]: '' }));
+    const updated = await updateMatchStatus(matchId, 'Rejected');
+    if (!updated) {
+      setInlineError((prev) => ({ ...prev, [matchId]: 'Could not reject right now. Please try again.' }));
+    }
+    setUpdatingMatchId(null);
   };
 
   return (
@@ -186,6 +208,24 @@ export default function MatchesPage() {
                       <MessageCircle size={18} />
                     </button>
                   )}
+                  {match.matchStatus === 'Pending' && match.pendingRole === 'received' && (
+                    <>
+                      <button
+                        onClick={() => { void handleInlineAccept(match.matchId); }}
+                        disabled={updatingMatchId === match.matchId}
+                        className="px-3 py-2 text-xs font-semibold rounded-xl text-white bg-gradient-to-r from-cyan-600 to-sky-700 hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+                      >
+                        {updatingMatchId === match.matchId ? 'Accepting...' : 'Accept'}
+                      </button>
+                      <button
+                        onClick={() => { void handleInlineReject(match.matchId); }}
+                        disabled={updatingMatchId === match.matchId}
+                        className="px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => navigate(`/match/${match.matchId}`)}
                     className="px-4 py-2 text-sm font-medium text-gray-700 bg-white/80 border border-gray-200/60 rounded-xl hover:bg-white hover:shadow-sm transition-all duration-200"
@@ -194,6 +234,11 @@ export default function MatchesPage() {
                   </button>
                 </div>
               </div>
+              {inlineError[match.matchId] && (
+                <p className="mt-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  {inlineError[match.matchId]}
+                </p>
+              )}
             </div>
           ))}
         </div>

@@ -33,6 +33,7 @@ export interface ChatMessage {
     text: string;
     timestamp: string;
     messageType: 'text' | 'image' | 'location' | 'file';
+    deliveryStatus?: 'sending' | 'sent' | 'failed';
     isEdited: boolean;
     editedAt?: string;
     readBy: string[]; // User IDs who read the message
@@ -117,6 +118,8 @@ export interface User {
     age: number;
     gender: 'Male' | 'Female' | 'Non-Binary' | 'Other';
     destination?: string;
+    matchingStartDate?: string;
+    matchingEndDate?: string;
     verificationStatus: 'Verified' | 'Unverified' | 'Pending';
     bio: string;
     photoUrl?: string;
@@ -143,7 +146,7 @@ export interface User {
 
 export interface TravelProfile {
     budget: 'Low' | 'Medium' | 'High';
-    travelStyle: 'Backpacking' | 'Luxury' | 'Standard' | 'Adventure' | 'Leisure' | 'Business';
+    travelStyle: 'Backpacker' | 'Luxury' | 'Adventure' | 'Leisure' | 'Business';
     interests: string[]; // e.g., 'Nature', 'Food', 'History', 'Nightlife'
     personality?: 'Introvert' | 'Extrovert' | 'Ambivert';
     languagePreference?: string;
@@ -159,7 +162,7 @@ export interface Trip {
     destination: string;
     startDate: string; // ISO Date string
     endDate: string;   // ISO Date string
-    travelType: 'Leisure' | 'Business' | 'Backpacking' | 'Adventure' | 'Standard' | 'Luxury';
+    travelType: 'Leisure' | 'Business' | 'Backpacker' | 'Adventure' | 'Luxury';
     budget: 'Low' | 'Medium' | 'High';
     status: 'Planning' | 'Active' | 'Completed' | 'Cancelled';
     description?: string;
@@ -176,6 +179,7 @@ export interface Match {
     user: User;
     score: number; // 0-100
     matchStatus: 'Recommended' | 'Pending' | 'Matched' | 'Rejected';
+    pendingRole?: 'sent' | 'received';
     compatibilityScore: CompatibilityScore;
     matchDetails: {
         interestMatch: string[];
@@ -188,6 +192,9 @@ export interface Match {
         locationProximity: 'Same City' | 'Nearby' | 'Different';
     };
     chatEnabled: boolean;
+    canEndChat?: boolean;
+    tripCompleted?: boolean;
+    endChatAvailableOn?: string;
     createdAt: string;
     lastInteraction?: string;
 }
@@ -206,3 +213,4 @@ export interface MatchSummary {
         travelType: Trip['travelType'];
     };
 }
+

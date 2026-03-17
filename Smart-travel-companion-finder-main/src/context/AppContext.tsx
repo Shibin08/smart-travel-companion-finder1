@@ -30,6 +30,7 @@ interface AppContextType {
     matchSummary: MatchSummary | null;
     validationErrors: string[];
     updateMatchStatus: (matchId: string, status: Match['matchStatus']) => Promise<boolean>;
+    endChat: (matchId: string) => Promise<{ ok: boolean; error?: string }>;
     getMatchById: (matchId: string) => Match | undefined;
     getMessagesForMatch: (matchId: string) => ChatMessage[];
     loadMessagesForMatch: (matchId: string) => Promise<void>;
@@ -44,6 +45,8 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 const TOKEN_STORAGE_KEY = 'tcf_token';
+const ELIGIBLE_SCORE_THRESHOLD = 55;
+const RECOMMENDED_SCORE_THRESHOLD = 70;
 
 const normalizeBudget = (score: number): Trip['budget'] => {
     if (score >= 80) return 'High';
@@ -62,6 +65,31 @@ const normalizeGender = (gender?: string): Match['user']['gender'] => {
     return 'Other';
 };
 
+const normalizeTravelStyle = (value?: string): Match['user']['profile']['travelStyle'] => {
+    if (!value) return 'Leisure';
+    if (value === 'Backpacking') return 'Backpacker';
+    if (value === 'Standard') return 'Leisure';
+    if (value === 'Backpacker' || value === 'Luxury' || value === 'Adventure' || value === 'Leisure' || value === 'Business') {
+        return value;
+    }
+    return 'Leisure';
+};
+
+const LOCATION_PLACEHOLDERS = new Set(['', 'unknown', 'abroad', 'not set', 'none', 'null', 'n/a']);
+
+const cleanLocationValue = (value?: string): string | undefined => {
+    const trimmed = (value ?? '').trim();
+    if (!trimmed) return undefined;
+    if (LOCATION_PLACEHOLDERS.has(trimmed.toLowerCase())) return undefined;
+    return trimmed;
+};
+
+const normalizeLocationForDisplay = (homeCountry?: string, currentCity?: string): { homeCountry: string; currentCity: string } => {
+    const country = cleanLocationValue(homeCountry) ?? 'India';
+    const city = cleanLocationValue(currentCity) ?? country;
+    return { homeCountry: country, currentCity: city };
+};
+
 interface BackendUserExtra {
     age?: number;
     travel_style?: string;
@@ -70,6 +98,8 @@ interface BackendUserExtra {
     home_country?: string;
     current_city?: string;
     bio?: string;
+    review_avg_rating?: number;
+    review_count?: number;
 }
 
 const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: string, gender?: string, extra?: BackendUserExtra): Match['user'] => {
@@ -78,8 +108,8 @@ const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: s
         ? extra.interests.split(/[|,]/).map(s => s.trim()).filter(Boolean)
         : ['Travel'];
 
-    // Map travel_style from backend or fall back to 'Standard'
-    const travelStyle = (extra?.travel_style as Match['user']['profile']['travelStyle']) || 'Standard';
+    // Map travel_style from backend and normalize legacy labels.
+    const travelStyle = normalizeTravelStyle(extra?.travel_style);
 
     // Map budget_range float to budget label
     const budgetFromRange = (val?: number): Trip['budget'] => {
@@ -89,6 +119,8 @@ const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: s
         return 'Low';
     };
 
+    const location = normalizeLocationForDisplay(extra?.home_country, extra?.current_city);
+
     return {
         userId: id,
         name,
@@ -97,9 +129,9 @@ const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: s
         gender: normalizeGender(gender),
         photoUrl: photoUrl || undefined,
         verificationStatus: 'Pending',
-        bio: extra?.bio || 'Travel companion profile.',
-        homeCountry: extra?.home_country || 'India',
-        currentCity: extra?.current_city || 'Unknown',
+        bio: (extra?.bio && extra.bio.trim()) ? extra.bio : 'Travel companion profile.',
+        homeCountry: location.homeCountry,
+        currentCity: location.currentCity,
         profile: {
             budget: budgetFromRange(extra?.budget_range),
             travelStyle: travelStyle,
@@ -112,8 +144,8 @@ const buildFallbackUser = (id: string, name: string, score: number, photoUrl?: s
         },
         stats: {
             tripsCompleted: 0,
-            reviewsReceived: 0,
-            averageRating: 0,
+            reviewsReceived: extra?.review_count ?? 0,
+            averageRating: extra?.review_avg_rating ?? 0,
             responseRate: 0,
         },
     };
@@ -153,6 +185,7 @@ const mapBackendMessage = (matchId: string, raw: { message_id: number; sender_id
     text: raw.message_text,
     timestamp: raw.timestamp,
     messageType: 'text',
+    deliveryStatus: 'sent',
     isEdited: false,
     readBy: [raw.sender_id],
     reactions: [],
@@ -194,8 +227,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             home_country: ou.home_country,
             current_city: ou.current_city,
             bio: ou.bio,
+            review_avg_rating: ou.review_avg_rating,
+            review_count: ou.review_count,
         });
         const status = mapBackendStatusToUi(record.status);
+        const pendingRole =
+            status === 'Pending'
+                ? record.can_current_user_accept
+                    ? 'received'
+                    : record.requested_by_current_user
+                        ? 'sent'
+                        : undefined
+                : undefined;
 
         return {
             matchId: `api-${record.other_user.user_id}`,
@@ -203,6 +246,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             user: resolvedUser,
             score,
             matchStatus: status,
+            pendingRole,
+            canEndChat: Boolean(record.can_current_user_end_chat),
+            tripCompleted: Boolean(record.trip_completed),
+            endChatAvailableOn: record.end_chat_available_on ?? undefined,
             compatibilityScore: {
                 overall: score,
                 components: {
@@ -313,6 +360,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             setIsMatching(true);
             setMatchError(null);
             const previousStatusMap = new Map(matches.map((m) => [m.matchId, m.matchStatus]));
+            const previousPendingRoleMap = new Map(matches.map((m) => [m.matchId, m.pendingRole]));
 
             const runLocalMatching = () => {
                 const result = runAdvancedMatchingPipeline(user, tripToMatch, mockUsers, mockTrips);
@@ -326,6 +374,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
                                 : previousStatusMap.get(match.matchId) === 'Rejected'
                                     ? 'Rejected'
                                     : match.matchStatus,
+                        pendingRole: previousPendingRoleMap.get(match.matchId),
                     })),
                 );
                 setMatchSummary(result.summary);
@@ -377,11 +426,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
                             home_country: item.home_country,
                             current_city: item.current_city,
                             bio: item.bio,
+                            review_avg_rating: item.review_avg_rating,
+                            review_count: item.review_count,
                         });
                         const matchId = `api-${item.user_id}`;
                         const resolvedStatus = existingBackendMatch
                             ? mapBackendStatusToUi(existingBackendMatch.status)
                             : scoreToMatchStatus(score);
+                        const pendingRole = existingBackendMatch && resolvedStatus === 'Pending'
+                            ? existingBackendMatch.can_current_user_accept
+                                ? 'received'
+                                : existingBackendMatch.requested_by_current_user
+                                    ? 'sent'
+                                    : undefined
+                            : previousPendingRoleMap.get(matchId);
                         if (existingBackendMatch) {
                             nextBackendIdByLocalId[matchId] = existingBackendMatch.match_id;
                         }
@@ -391,7 +449,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
                             tripId: tripToMatch.tripId,
                             user: resolvedUser,
                             score,
-                            matchStatus: previousStatusMap.get(matchId) ?? resolvedStatus,
+                            matchStatus: existingBackendMatch
+                                ? mapBackendStatusToUi(existingBackendMatch.status)
+                                : previousStatusMap.get(matchId) ?? resolvedStatus,
+                            pendingRole,
+                            endChatAvailableOn: existingBackendMatch?.end_chat_available_on ?? undefined,
                             compatibilityScore: {
                                 overall: score,
                                 components: {
@@ -440,14 +502,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
                     setMatches(mergedMatches);
                     setBackendMatchIdByLocalId((prev) => ({ ...prev, ...nextBackendIdByLocalId }));
-                    const onlyRecommended = mergedMatches.filter((match) => match.matchStatus === 'Recommended');
+                    const searchCandidates = mappedMatches;
+                    const eligibleMatches = searchCandidates.filter(
+                        (match) => match.score >= ELIGIBLE_SCORE_THRESHOLD,
+                    );
+                    const recommendedMatches = searchCandidates.filter(
+                        (match) => match.score >= RECOMMENDED_SCORE_THRESHOLD,
+                    );
+                    const avgSource = recommendedMatches.length > 0
+                        ? recommendedMatches
+                        : eligibleMatches.length > 0
+                            ? eligibleMatches
+                            : searchCandidates;
+
                     setMatchSummary({
-                        totalCandidates: onlyRecommended.length,
-                        eligibleAfterFiltering: onlyRecommended.length,
-                        recommended: onlyRecommended.length,
+                        totalCandidates: searchCandidates.length,
+                        eligibleAfterFiltering: eligibleMatches.length,
+                        recommended: recommendedMatches.length,
                         matched: mergedMatches.filter((match) => match.matchStatus === 'Matched').length,
-                        averageScore: onlyRecommended.length > 0
-                            ? Math.round(onlyRecommended.reduce((sum, match) => sum + match.score, 0) / onlyRecommended.length)
+                        averageScore: avgSource.length > 0
+                            ? Math.round(avgSource.reduce((sum, match) => sum + match.score, 0) / avgSource.length)
                             : 0,
                         generatedAt: new Date().toISOString(),
                         filters: {
@@ -493,7 +567,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         try {
             if (token) {
-                if (status === 'Matched') {
+                // Send connection request -> ensure a backend match row exists in pending state.
+                if (status === 'Pending') {
+                    if (!resolvedBackendMatchId) {
+                        const created = await acceptMatch(token, selected.user.userId, selected.score);
+                        resolvedBackendMatchId = created.match_id;
+                    }
+                } else if (status === 'Matched') {
+                    // Accept request -> ensure row exists, then move to accepted.
                     if (!resolvedBackendMatchId) {
                         const created = await acceptMatch(token, selected.user.userId, selected.score);
                         resolvedBackendMatchId = created.match_id;
@@ -523,7 +604,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 return {
                     ...item,
                     matchStatus: status,
+                    pendingRole: status === 'Pending' ? 'sent' : undefined,
                     chatEnabled: item.score >= 40,
+                    canEndChat: status === 'Matched' ? false : item.canEndChat,
+                    tripCompleted: status === 'Matched' ? false : item.tripCompleted,
                 };
             }),
         );
@@ -555,6 +639,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return true;
     };
 
+    const endChat = async (matchId: string): Promise<{ ok: boolean; error?: string }> => {
+        const selected = matches.find((item) => item.matchId === matchId);
+        if (!selected) {
+            return { ok: false, error: 'Match not found.' };
+        }
+        if (selected.matchStatus !== 'Matched') {
+            return { ok: false, error: 'Only active chats can be ended.' };
+        }
+        if (!selected.canEndChat) {
+            return { ok: false, error: 'End chat is available only after both travelers complete the trip.' };
+        }
+
+        const token = localStorage.getItem(TOKEN_STORAGE_KEY);
+        if (!token) {
+            return { ok: false, error: 'Login token missing. Please sign in again.' };
+        }
+
+        let resolvedBackendMatchId = backendMatchIdByLocalId[matchId];
+        try {
+            if (!resolvedBackendMatchId) {
+                const backendMatchState = await fetchMatches(token);
+                const backendMatch = backendMatchState.matches.find(
+                    (item) => item.other_user.user_id === selected.user.userId && item.status === 'accepted',
+                );
+                if (backendMatch) {
+                    resolvedBackendMatchId = backendMatch.match_id;
+                }
+            }
+
+            if (!resolvedBackendMatchId) {
+                return { ok: false, error: 'Could not find the active backend match for this chat.' };
+            }
+
+            await updateMatchStatusBackend(token, resolvedBackendMatchId, 'cancelled');
+        } catch (error) {
+            return {
+                ok: false,
+                error: error instanceof Error ? error.message : 'Could not end chat right now.',
+            };
+        }
+
+        setMatches((prev) => prev.filter((item) => item.matchId !== matchId));
+        setMessagesByMatch((prev) => {
+            const next = { ...prev };
+            delete next[matchId];
+            return next;
+        });
+        setBackendMatchIdByLocalId((prev) => {
+            const next = { ...prev };
+            delete next[matchId];
+            return next;
+        });
+
+        return { ok: true };
+    };
+
     const getMatchById = (matchId: string) => matches.find((m) => m.matchId === matchId);
 
     const getMessagesForMatch = (matchId: string) => messagesByMatch[matchId] ?? [];
@@ -579,13 +719,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
 
     const sendMessage = (matchId: string, senderId: string, text: string) => {
+        const optimisticId = `${matchId}-${Date.now()}`;
         const message: ChatMessage = {
-            messageId: `${matchId}-${Date.now()}`,
+            messageId: optimisticId,
             chatId: matchId,
             senderId,
             text,
             timestamp: new Date().toISOString(),
             messageType: 'text',
+            deliveryStatus: senderId === user?.userId ? 'sending' : 'sent',
             isEdited: false,
             readBy: [senderId],
             reactions: [],
@@ -600,9 +742,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const matchedUserId = matches.find((match) => match.matchId === matchId)?.user.userId;
 
         if (token && matchedUserId && senderId === user?.userId) {
-            void sendChatMessage(token, matchedUserId, text).catch(() => {
-                // local optimistic message remains when backend call fails
-            });
+            void sendChatMessage(token, matchedUserId, text)
+                .then((saved) => {
+                    setMessagesByMatch((prev) => ({
+                        ...prev,
+                        [matchId]: (prev[matchId] ?? []).map((item) => (
+                            item.messageId === optimisticId
+                                ? {
+                                    ...item,
+                                    messageId: `api-${saved.message_id}`,
+                                    timestamp: saved.timestamp.endsWith('Z') ? saved.timestamp : `${saved.timestamp}Z`,
+                                    deliveryStatus: 'sent',
+                                }
+                                : item
+                        )),
+                    }));
+                })
+                .catch(() => {
+                    setMessagesByMatch((prev) => ({
+                        ...prev,
+                        [matchId]: (prev[matchId] ?? []).map((item) => (
+                            item.messageId === optimisticId
+                                ? { ...item, deliveryStatus: 'failed' }
+                                : item
+                        )),
+                    }));
+                });
         }
     };
 
@@ -769,6 +934,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         matchSummary,
         validationErrors,
         updateMatchStatus,
+        endChat,
         getMatchById,
         getMessagesForMatch,
         loadMessagesForMatch,
@@ -795,3 +961,4 @@ export function useApp() {
     }
     return context;
 }
+

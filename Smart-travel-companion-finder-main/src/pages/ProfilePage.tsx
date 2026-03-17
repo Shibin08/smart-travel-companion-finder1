@@ -46,6 +46,14 @@ export default function ProfilePage() {
   });
 
   const selectedInterests = formData.profile?.interests ?? [];
+  const formatMatchingDate = (value?: string) => {
+    if (!value) return 'Not set';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return parsed.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+  const matchingDestination = user?.destination?.trim() ? user.destination : 'Not set';
+  const matchingDateRange = `${formatMatchingDate(user?.matchingStartDate)} - ${formatMatchingDate(user?.matchingEndDate)}`;
 
   const completion = useMemo(() => {
     const points = [
@@ -125,6 +133,27 @@ export default function ProfilePage() {
   const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const toDateInputValue = (value?: string) => {
+    if (!value) return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '';
+    return parsed.toISOString().split('T')[0];
+  };
+  const [isEditingMatchingTrip, setIsEditingMatchingTrip] = useState(false);
+  const [matchingTripDraft, setMatchingTripDraft] = useState({
+    destination: user?.destination ?? '',
+    startDate: toDateInputValue(user?.matchingStartDate),
+    endDate: toDateInputValue(user?.matchingEndDate),
+  });
+
+  useEffect(() => {
+    setMatchingTripDraft({
+      destination: user?.destination ?? '',
+      startDate: toDateInputValue(user?.matchingStartDate),
+      endDate: toDateInputValue(user?.matchingEndDate),
+    });
+  }, [user?.destination, user?.matchingStartDate, user?.matchingEndDate]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -172,6 +201,42 @@ export default function ProfilePage() {
     } finally {
       setIsChangingPassword(false);
     }
+  };
+
+  const handleSaveMatchingTrip = async () => {
+    const destination = matchingTripDraft.destination.trim();
+    const startDate = matchingTripDraft.startDate;
+    const endDate = matchingTripDraft.endDate;
+
+    if (!destination) {
+      setSavedMessage('Destination is required for current matching trip.');
+      window.setTimeout(() => setSavedMessage(''), 2500);
+      return;
+    }
+    if (!startDate || !endDate) {
+      setSavedMessage('Start and end dates are required for current matching trip.');
+      window.setTimeout(() => setSavedMessage(''), 2500);
+      return;
+    }
+    if (new Date(startDate) > new Date(endDate)) {
+      setSavedMessage('Start date cannot be after end date.');
+      window.setTimeout(() => setSavedMessage(''), 2500);
+      return;
+    }
+
+    const success = await updateProfile({
+      destination,
+      matchingStartDate: startDate,
+      matchingEndDate: endDate,
+    });
+
+    if (success) {
+      setIsEditingMatchingTrip(false);
+      setSavedMessage('Current matching trip updated.');
+    } else {
+      setSavedMessage('Could not update matching trip. Please try again.');
+    }
+    window.setTimeout(() => setSavedMessage(''), 2500);
   };
 
   return (
@@ -276,11 +341,8 @@ export default function ProfilePage() {
                   disabled={isUploadingPhoto}
                   className="hidden"
                 />
-                <p className="text-xs text-gray-500">JPG, PNG, or WebP • Max 5MB</p>
+                <p className="text-xs text-gray-500">JPG, PNG, or WebP • Max 10MB</p>
                 {photoUploadError && <p className="text-xs text-red-600">❌ {photoUploadError}</p>}
-                {photoUrl && import.meta.env.DEV && (
-                  <p className="text-xs text-gray-400 text-center break-all max-w-xs">Current: {photoUrl.substring(0, 50)}...</p>
-                )}
               </div>
             </div>
 
@@ -334,11 +396,148 @@ export default function ProfilePage() {
               <label className="text-sm font-medium text-gray-700">Bio</label>
               <textarea name="bio" rows={4} value={formData.bio ?? ''} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
             </div>
+
+            {/* Change Password Section (Basic Info only) */}
+            <div className="pt-4 border-t border-gray-200">
+              <div className="inline-flex items-center text-sm font-medium text-gray-700 mb-3">
+                <Lock className="h-4 w-4 mr-1" /> Change Password
+              </div>
+              <div className="grid md:grid-cols-3 gap-3">
+                <input
+                  type="password"
+                  placeholder="Current password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                />
+                <input
+                  type="password"
+                  placeholder="New password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmNewPassword}
+                  onChange={(e) => setConfirmNewPassword(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                />
+              </div>
+              <div className="flex items-center gap-3 mt-2">
+                <button
+                  onClick={handleChangePassword}
+                  disabled={isChangingPassword || !currentPassword || !newPassword}
+                  className="px-5 py-2.5 text-sm font-semibold bg-gray-800 text-white rounded-xl hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {isChangingPassword ? 'Changing...' : 'Update Password'}
+                </button>
+                {passwordMsg && (
+                  <span className={`text-sm ${passwordMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                    {passwordMsg.text}
+                  </span>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
         {activeTab === 'travel' && (
           <div className="space-y-5">
+            <div className="rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-cyan-900">Current Trip for Matching</p>
+                  <p className="text-xs text-cyan-700 mt-0.5">Edit manually here. Find Companions also auto-syncs this trip.</p>
+                </div>
+                {!isEditingMatchingTrip ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingMatchingTrip(true)}
+                    className="shrink-0 rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 transition-colors"
+                  >
+                    Edit
+                  </button>
+                ) : (
+                  <div className="shrink-0 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsEditingMatchingTrip(false);
+                        setMatchingTripDraft({
+                          destination: user?.destination ?? '',
+                          startDate: toDateInputValue(user?.matchingStartDate),
+                          endDate: toDateInputValue(user?.matchingEndDate),
+                        });
+                      }}
+                      className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { void handleSaveMatchingTrip(); }}
+                      className="rounded-lg border border-cyan-600 bg-cyan-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-cyan-700 transition-colors"
+                    >
+                      Save
+                    </button>
+                  </div>
+                )}
+              </div>
+              {!isEditingMatchingTrip ? (
+                <div className="mt-3 grid sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Destination</p>
+                    <p className="text-sm font-semibold text-gray-900">{matchingDestination}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Dates</p>
+                    <p className="text-sm font-semibold text-gray-900">{matchingDateRange}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Budget</p>
+                    <p className="text-sm font-semibold text-gray-900">{user.profile.budget}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Trip Type</p>
+                    <p className="text-sm font-semibold text-gray-900">{user.profile.travelStyle}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 grid sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-1">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Destination</p>
+                    <input
+                      type="text"
+                      value={matchingTripDraft.destination}
+                      onChange={(e) => setMatchingTripDraft((prev) => ({ ...prev, destination: e.target.value }))}
+                      className="mt-1 w-full border border-cyan-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">Start Date</p>
+                    <input
+                      type="date"
+                      value={matchingTripDraft.startDate}
+                      onChange={(e) => setMatchingTripDraft((prev) => ({ ...prev, startDate: e.target.value }))}
+                      className="mt-1 w-full border border-cyan-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-cyan-700/80">End Date</p>
+                    <input
+                      type="date"
+                      min={matchingTripDraft.startDate || undefined}
+                      value={matchingTripDraft.endDate}
+                      onChange={(e) => setMatchingTripDraft((prev) => ({ ...prev, endDate: e.target.value }))}
+                      className="mt-1 w-full border border-cyan-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">Budget Range</label>
               <div className="grid grid-cols-3 gap-3">
@@ -357,7 +556,7 @@ export default function ProfilePage() {
             <div>
               <label className="text-sm font-medium text-gray-700 mb-2 block">Travel Style</label>
               <div className="grid grid-cols-2 gap-3">
-                {(['Backpacking', 'Standard', 'Luxury', 'Adventure'] as const).map((option) => (
+                {(['Backpacker', 'Leisure', 'Luxury', 'Adventure'] as const).map((option) => (
                   <button
                     key={option}
                     onClick={() => handleProfileChange('travelStyle', option)}
@@ -401,53 +600,6 @@ export default function ProfilePage() {
           </div>
         )}
 
-        {/* Change Password Section */}
-        <div className="pt-4 border-t border-gray-200">
-          <button
-            onClick={() => setActiveTab(activeTab === 'basic' ? 'basic' : activeTab)}
-            className="inline-flex items-center text-sm font-medium text-gray-700 mb-3"
-          >
-            <Lock className="h-4 w-4 mr-1" /> Change Password
-          </button>
-          <div className="grid md:grid-cols-3 gap-3">
-            <input
-              type="password"
-              placeholder="Current password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
-            />
-            <input
-              type="password"
-              placeholder="New password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
-            />
-            <input
-              type="password"
-              placeholder="Confirm new password"
-              value={confirmNewPassword}
-              onChange={(e) => setConfirmNewPassword(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
-            />
-          </div>
-          <div className="flex items-center gap-3 mt-2">
-            <button
-              onClick={handleChangePassword}
-              disabled={isChangingPassword || !currentPassword || !newPassword}
-              className="px-5 py-2.5 text-sm font-semibold bg-gray-800 text-white rounded-xl hover:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isChangingPassword ? 'Changing...' : 'Update Password'}
-            </button>
-            {passwordMsg && (
-              <span className={`text-sm ${passwordMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
-                {passwordMsg.text}
-              </span>
-            )}
-          </div>
-        </div>
-
         <div className="pt-4 border-t border-gray-200 flex items-center justify-between">
           <span className="text-sm text-green-600">{savedMessage}</span>
           <button onClick={handleSave} disabled={isSaving} className="inline-flex items-center px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-cyan-600 to-sky-700 hover:from-cyan-700 hover:to-sky-800 shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200">
@@ -458,3 +610,5 @@ export default function ProfilePage() {
     </div>
   );
 }
+
+

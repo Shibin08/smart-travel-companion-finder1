@@ -85,6 +85,8 @@ class MatchUserInfo(BaseModel):
     home_country: Optional[str] = None
     current_city: Optional[str] = None
     bio: Optional[str] = None
+    review_avg_rating: Optional[float] = None
+    review_count: int = 0
 
 
 class MatchWithUserResponse(BaseModel):
@@ -93,6 +95,11 @@ class MatchWithUserResponse(BaseModel):
     compatibility_score: float
     status: str
     created_at: Optional[datetime] = None
+    requested_by_current_user: Optional[bool] = None
+    can_current_user_accept: Optional[bool] = None
+    trip_completed: Optional[bool] = None
+    can_current_user_end_chat: Optional[bool] = None
+    end_chat_available_on: Optional[str] = None
     other_user: MatchUserInfo
 
     class Config:

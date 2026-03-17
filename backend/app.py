@@ -29,7 +29,7 @@ from slowapi.errors import RateLimitExceeded
 
 from auth import create_access_token, get_current_user, hash_password, verify_password
 from config import GOOGLE_CLIENT_ID
-from database import Base, engine, get_db
+from database import Base, engine, ensure_match_pair_guard, get_db
 from matching import find_matches, get_user_matches, store_match, update_match_status
 from models import User
 from chat import router as chat_router
@@ -44,6 +44,8 @@ if os.getenv("ENV") == "development":
     Base.metadata.create_all(bind=engine)
 
 logger = logging.getLogger(__name__)
+MAX_PHOTO_SIZE_MB = 10
+MAX_PHOTO_SIZE_BYTES = MAX_PHOTO_SIZE_MB * 1024 * 1024
 
 app = FastAPI(
     title="Smart Travel Companion Finder API",
@@ -80,6 +82,12 @@ app.include_router(emergency_router)
 app.include_router(place_requests_router)
 
 
+@app.on_event("startup")
+def startup_db_guards() -> None:
+    """Apply DB guardrails needed by runtime logic."""
+    ensure_match_pair_guard()
+
+
 # ----------------------------
 # Response Models
 # ----------------------------
@@ -107,6 +115,8 @@ class RecommendMatchItem(BaseModel):
     home_country: Optional[str] = None
     current_city: Optional[str] = None
     bio: Optional[str] = None
+    review_avg_rating: Optional[float] = None
+    review_count: int = 0
 
 
 class RecommendResponse(BaseModel):
@@ -121,6 +131,7 @@ class TripSearchParams(BaseModel):
     end_date: Optional[str] = None
     budget: Optional[str] = None
     travel_style: Optional[str] = None
+    strict_filters: bool = False
 
 
 
@@ -349,6 +360,8 @@ def recommend(
             trip_override["budget_range"] = body.budget
         if body.travel_style:
             trip_override["travel_style"] = body.travel_style
+        if body.strict_filters:
+            trip_override["strict_filters"] = True
         # Cross-field validation: end_date must not be before start_date
         if "start_date" in trip_override and "end_date" in trip_override:
             if trip_override["end_date"] < trip_override["start_date"]:
@@ -441,7 +454,7 @@ def change_match_status(
         )
     except ValueError as exc:
         msg = str(exc)
-        if "not part of this match" in msg:
+        if "not part of this match" in msg or "Only the request recipient can accept" in msg:
             raise HTTPException(status_code=403, detail=msg)
         raise HTTPException(status_code=400, detail=msg)
 
@@ -544,9 +557,9 @@ async def upload_photo(
         content = await file.read()
         print(f"📦 File size: {len(content)} bytes")
 
-        # Validate file size (max 5MB)
-        if len(content) > 5 * 1024 * 1024:
-            raise HTTPException(status_code=400, detail="File size exceeds 5MB limit")
+        # Validate file size (max 10MB)
+        if len(content) > MAX_PHOTO_SIZE_BYTES:
+            raise HTTPException(status_code=400, detail=f"File size exceeds {MAX_PHOTO_SIZE_MB}MB limit")
 
         # Delete old photo if it's a local file
         if user.photo_url and is_local_photo(user.photo_url):

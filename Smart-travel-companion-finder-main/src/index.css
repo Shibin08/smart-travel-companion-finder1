@@ -175,7 +175,7 @@ button {
 
 .card-hover-glow:hover {
   transform: translateY(-4px);
-  box-shadow: 0 12px 40px -8px rgba(79, 70, 229, 0.2), 0 4px 12px -2px rgba(2, 6, 23, 0.08);
+  box-shadow: 0 12px 40px -8px rgba(14, 165, 233, 0.24), 0 4px 12px -2px rgba(2, 6, 23, 0.08);
 }
 
 .gradient-border {
@@ -188,7 +188,7 @@ button {
   inset: 0;
   border-radius: inherit;
   padding: 1.5px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6, #f43f5e, #6366f1);
+  background: linear-gradient(135deg, #06b6d4, #0ea5a5, #0284c7, #06b6d4);
   background-size: 300% 300%;
   animation: borderGlow 4s ease infinite;
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);

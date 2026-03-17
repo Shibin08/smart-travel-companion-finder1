@@ -41,6 +41,10 @@ debug_score.py
 
 # Backup / temp files
 *.bak
+*.bak_*
+*.db.bak*
+*.db.bak_*
+*.csv.bak_*
 ts_errors.txt
 
 # Frontend build output

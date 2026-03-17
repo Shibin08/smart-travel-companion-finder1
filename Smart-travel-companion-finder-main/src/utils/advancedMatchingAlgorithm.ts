@@ -50,10 +50,6 @@ export const validateTripInput = (trip: Trip): string[] => {
     errors.push('Start date cannot be after end date.');
   }
 
-  if (differenceInCalendarDays(end, start) > 30) {
-    errors.push('Trip duration should be 30 days or less for companion matching.');
-  }
-
   return errors;
 };
 

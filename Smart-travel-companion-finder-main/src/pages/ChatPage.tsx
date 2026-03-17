@@ -1,34 +1,47 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useParams } from 'react-router-dom';
 import ChatInterface from '../components/ChatInterface';
 import { useAuth } from '../context/AuthContext';
+import { useApp } from '../context/AppContext';
 import { mockUsers } from '../data/mockUsers';
-import type { ChatMessage, Match, User } from '../types';
-import { fetchConversation, fetchUserPublicProfile, sendChatMessage } from '../utils/apiClient';
-import { ChatManager } from '../utils/chatManager';
+import type { Match, User } from '../types';
+import { fetchUserPublicProfile } from '../utils/apiClient';
+import { useRealtimeConversation } from '../hooks/useRealtimeConversation';
 
-const TOKEN_STORAGE_KEY = 'tcf_token';
+const CHAT_SEEN_STORAGE_KEY = 'tcf_chat_seen_v1';
+
+const readSeenMap = (): Record<string, string> => {
+  try {
+    const raw = localStorage.getItem(CHAT_SEEN_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const markConversationSeen = (otherUserId: string, timestamp?: string) => {
+  const map = readSeenMap();
+  map[otherUserId] = timestamp ?? new Date().toISOString();
+  localStorage.setItem(CHAT_SEEN_STORAGE_KEY, JSON.stringify(map));
+};
 
 export default function ChatPage() {
   const { chatId } = useParams<{ chatId: string }>();
   const location = useLocation();
   const { user } = useAuth();
+  const { getMatchById, endChat } = useApp();
   const [otherUser, setOtherUser] = useState<User | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const loadedRef = useRef(false);
+  const [chatEndedAt, setChatEndedAt] = useState<string | null>(null);
 
   useEffect(() => { document.title = 'Chat — TravelMatch'; }, []);
-
-  const getLocalMessages = useCallback((id: string, limit: number) => {
-    return ChatManager.getInstance().getChatMessages(id, limit);
-  }, []);
 
   useEffect(() => {
     if (!chatId || !user) return;
 
-    // Stale-closure guard: if chatId changes before async completes, discard result
     let cancelled = false;
-    loadedRef.current = false;
+    setChatEndedAt(null);
 
     const inferredUserId = chatId.startsWith('api-') ? chatId.replace('api-', '') : chatId;
     const userData = mockUsers.find((candidate) => candidate.userId === inferredUserId);
@@ -47,7 +60,7 @@ export default function ChatPage() {
       currentCity: 'Unknown',
       profile: {
         budget: 'Medium',
-        travelStyle: 'Standard',
+        travelStyle: 'Leisure',
         interests: ['Travel'],
       },
       preferences: {
@@ -81,92 +94,44 @@ export default function ChatPage() {
         });
     }
 
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) {
-      setMessages(getLocalMessages(chatId, 50));
-      loadedRef.current = true;
-      return;
-    }
-
-    void (async () => {
-      try {
-        const backendMessages = await fetchConversation(token, inferredUserId);
-        if (!cancelled && !loadedRef.current) {
-          setMessages(
-            backendMessages.map((message) => ({
-              messageId: `api-${message.message_id}`,
-              chatId,
-              senderId: message.sender_id,
-              text: message.message_text,
-              timestamp: message.timestamp.endsWith('Z') ? message.timestamp : message.timestamp + 'Z',
-              messageType: 'text',
-              isEdited: false,
-              readBy: [message.sender_id],
-              reactions: [],
-            })),
-          );
-          loadedRef.current = true;
-        }
-      } catch {
-        if (!cancelled && !loadedRef.current) {
-          setMessages(getLocalMessages(chatId, 50));
-          loadedRef.current = true;
-        }
-      }
-    })();
-
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId, user?.userId]);
 
-  // Poll for new messages every 5 seconds
+  const {
+    messages,
+    sendMessage,
+    setTypingState,
+    connectionStatus,
+    isOtherUserTyping,
+    chatError,
+    clearChatError,
+  } = useRealtimeConversation({
+    chatId: chatId ?? '',
+    otherUserId: otherUser?.userId ?? '',
+    currentUserId: user?.userId,
+    enabled: Boolean(chatId && user && otherUser && !chatEndedAt),
+  });
+
   useEffect(() => {
-    if (!chatId || !user) return;
-
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) return;
-
-    const inferredUserId = chatId.startsWith('api-') ? chatId.replace('api-', '') : chatId;
-
-    const interval = setInterval(async () => {
-      try {
-        const backendMessages = await fetchConversation(token, inferredUserId);
-        const mapped = backendMessages.map((message) => ({
-          messageId: `api-${message.message_id}`,
-          chatId,
-          senderId: message.sender_id,
-          text: message.message_text,
-          timestamp: message.timestamp.endsWith('Z') ? message.timestamp : message.timestamp + 'Z',
-          messageType: 'text' as const,
-          isEdited: false,
-          readBy: [message.sender_id],
-          reactions: [] as { emoji: string; userId: string }[],
-        }));
-        setMessages((prev) => {
-          // Only update if there are truly new messages
-          if (mapped.length !== prev.length) return mapped;
-          const lastNew = mapped[mapped.length - 1]?.messageId;
-          const lastOld = prev[prev.length - 1]?.messageId;
-          return lastNew !== lastOld ? mapped : prev;
-        });
-      } catch {
-        // silently skip polling failures
-      }
-    }, 5000);
-
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatId, user?.userId]);
+    if (!otherUser?.userId) return;
+    const lastMessageTimestamp = messages[messages.length - 1]?.timestamp;
+    markConversationSeen(otherUser.userId, lastMessageTimestamp ?? new Date().toISOString());
+  }, [messages, otherUser?.userId]);
 
   const chatMatch = useMemo<Match | null>(() => {
     if (!otherUser || !chatId) return null;
+
+    const existing = getMatchById(chatId);
+    if (existing) {
+      return existing;
+    }
 
     return {
       matchId: chatId,
       tripId: 'chat-direct',
       user: otherUser,
       score: 75,
-      matchStatus: 'Matched',
+      matchStatus: 'Pending',
       compatibilityScore: {
         overall: 75,
         components: {
@@ -192,49 +157,26 @@ export default function ChatPage() {
         languageMatch: true,
         locationProximity: otherUser.currentCity === user?.currentCity ? 'Same City' : 'Different',
       },
-      chatEnabled: true,
+      chatEnabled: false,
       createdAt: new Date().toISOString(),
     };
-  }, [chatId, otherUser, user?.currentCity]);
+  }, [chatId, otherUser, user?.currentCity, getMatchById]);
 
   const handleSendMessage = (text: string, replyTo?: { messageId: string; senderId: string; text: string }) => {
-    if (!user || !chatId || !otherUser) return;
+    if (!user || !chatId || !otherUser || chatEndedAt) return;
+    sendMessage(text, replyTo);
+  };
 
-    const optimistic: ChatMessage = {
-      messageId: `${chatId}-${Date.now()}`,
-      chatId,
-      senderId: user.userId,
-      text,
-      timestamp: new Date().toISOString(),
-      messageType: 'text',
-      isEdited: false,
-      readBy: [user.userId],
-      reactions: [],
-      replyTo,
-    };
+  const handleEndChat = async () => {
+    if (!chatMatch) {
+      return { ok: false, error: 'Unable to resolve chat context.' };
+    }
 
-    setMessages((prev) => [...prev, optimistic]);
-
-    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
-    if (!token) return;
-
-    void sendChatMessage(token, otherUser.userId, text)
-      .then((saved) => {
-        setMessages((prev) =>
-          prev.map((message) =>
-            message.messageId === optimistic.messageId
-              ? {
-                  ...message,
-                  messageId: `api-${saved.message_id}`,
-                  timestamp: saved.timestamp.endsWith('Z') ? saved.timestamp : saved.timestamp + 'Z',
-                }
-              : message,
-          ),
-        );
-      })
-      .catch(() => {
-        // keep optimistic message if backend send fails
-      });
+    const result = await endChat(chatMatch.matchId);
+    if (result.ok) {
+      setChatEndedAt(new Date().toISOString());
+    }
+    return result;
   };
 
   if (!user) {
@@ -269,7 +211,24 @@ export default function ChatPage() {
 
   return (
     <div className="h-[calc(100vh-12rem)]">
-      <ChatInterface match={chatMatch} currentUser={user} messages={messages} onSendMessage={handleSendMessage} onClearChat={() => setMessages([])} />
+      <ChatInterface
+        match={chatMatch}
+        currentUser={user}
+        messages={messages}
+        onSendMessage={handleSendMessage}
+        onTypingChange={setTypingState}
+        onEndChat={handleEndChat}
+        chatEndedAt={chatEndedAt}
+        connectionStatus={connectionStatus}
+        isOtherUserTyping={isOtherUserTyping}
+        networkError={chatError}
+        onDismissNetworkError={clearChatError}
+        onBackToConversations={() => {
+          if (otherUser?.userId) {
+            markConversationSeen(otherUser.userId, chatEndedAt ?? new Date().toISOString());
+          }
+        }}
+      />
     </div>
   );
 }

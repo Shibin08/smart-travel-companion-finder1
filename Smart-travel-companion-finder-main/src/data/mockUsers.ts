@@ -1,4 +1,4 @@
-import type { User } from '../types';
+﻿import type { User } from '../types';
 
 const defaultPreferences = {
     notifications: true,
@@ -45,7 +45,7 @@ const rawUsers: RawUser[] = [
         },
         profile: {
             budget: 'Medium',
-            travelStyle: 'Standard',
+            travelStyle: 'Leisure',
             interests: ['Food', 'Culture', 'Photography'],
             personality: 'Extrovert',
             languagePreference: 'English',
@@ -106,7 +106,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Mumbai',
         profile: {
             budget: 'Low',
-            travelStyle: 'Backpacking',
+            travelStyle: 'Backpacker',
             interests: ['Nature', 'History', 'Meeting People'],
             personality: 'Ambivert',
             languagePreference: 'Hindi',
@@ -144,7 +144,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Hyderabad',
         profile: {
             budget: 'Medium',
-            travelStyle: 'Standard',
+            travelStyle: 'Leisure',
             interests: ['Technology', 'Cafes', 'Culture'],
             personality: 'Ambivert',
             languagePreference: 'English',
@@ -163,7 +163,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Chennai',
         profile: {
             budget: 'Medium',
-            travelStyle: 'Standard',
+            travelStyle: 'Leisure',
             interests: ['History', 'Museums', 'Art'],
             personality: 'Introvert',
             languagePreference: 'English',
@@ -182,7 +182,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Kochi',
         profile: {
             budget: 'Low',
-            travelStyle: 'Backpacking',
+            travelStyle: 'Backpacker',
             interests: ['Nightlife', 'Beaches', 'Music'],
             personality: 'Extrovert',
             languagePreference: 'English',
@@ -239,7 +239,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Goa',
         profile: {
             budget: 'Low',
-            travelStyle: 'Backpacking',
+            travelStyle: 'Backpacker',
             interests: ['Surfing', 'Beaches', 'Sports'],
             personality: 'Extrovert',
             languagePreference: 'Spanish',
@@ -258,7 +258,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Rishikesh',
         profile: {
             budget: 'Medium',
-            travelStyle: 'Standard',
+            travelStyle: 'Leisure',
             interests: ['Yoga', 'Nature', 'Wellness'],
             personality: 'Introvert',
             languagePreference: 'English',
@@ -315,8 +315,8 @@ const rawUsers: RawUser[] = [
         currentCity: 'Lucknow',
         profile: {
             budget: 'Low',
-            travelStyle: 'Backpacking',
-            interests: ['History', 'Street Food', 'Backpacking'],
+            travelStyle: 'Backpacker',
+            interests: ['History', 'Street Food', 'Backpacker'],
             personality: 'Ambivert',
             languagePreference: 'Hindi',
         }
@@ -334,7 +334,7 @@ const rawUsers: RawUser[] = [
         currentCity: 'Pondicherry',
         profile: {
             budget: 'Medium',
-            travelStyle: 'Standard',
+            travelStyle: 'Leisure',
             interests: ['Cafes', 'Beaches', 'Photography'],
             personality: 'Extrovert',
             languagePreference: 'French',
@@ -390,3 +390,5 @@ export const currentUserMock: User = {
         tripFrequency: 'Occasionally',
     }
 };
+
+

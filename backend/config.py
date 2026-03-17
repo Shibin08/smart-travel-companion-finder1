@@ -1,10 +1,3 @@
-"""
-Centralized environment configuration.
-
-Loads variables from a .env file (if present) and validates that all
-required settings are provided.
-"""
-
 import os
 
 from dotenv import load_dotenv

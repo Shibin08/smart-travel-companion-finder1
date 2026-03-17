@@ -64,7 +64,7 @@ export class DataValidator {
       errors.push(new ValidationError('Valid budget range is required', 'budget', 'INVALID_BUDGET'));
     }
 
-    if (!profile.travelStyle || !['Backpacking', 'Luxury', 'Standard', 'Adventure'].includes(profile.travelStyle)) {
+    if (!profile.travelStyle || !['Backpacker', 'Luxury', 'Adventure', 'Leisure'].includes(profile.travelStyle)) {
       errors.push(new ValidationError('Valid travel style is required', 'travelStyle', 'INVALID_TRAVEL_STYLE'));
     }
 
@@ -115,9 +115,6 @@ export class DataValidator {
 
     if (trip.startDate && trip.endDate) {
       const duration = this.calculateDaysBetween(trip.startDate, trip.endDate);
-      if (duration > 30) {
-        errors.push(new ValidationError('Trip duration cannot exceed 30 days', 'endDate', 'TRIP_TOO_LONG'));
-      }
       if (duration < 1) {
         errors.push(new ValidationError('Trip duration must be at least 1 day', 'endDate', 'TRIP_TOO_SHORT'));
       }
@@ -127,7 +124,7 @@ export class DataValidator {
       errors.push(new ValidationError('Start date cannot be in the past', 'startDate', 'PAST_START_DATE'));
     }
 
-    if (!trip.travelType || !['Leisure', 'Business', 'Backpacking', 'Adventure'].includes(trip.travelType)) {
+    if (!trip.travelType || !['Leisure', 'Adventure', 'Backpacker', 'Luxury'].includes(trip.travelType)) {
       errors.push(new ValidationError('Valid travel type is required', 'travelType', 'INVALID_TRAVEL_TYPE'));
     }
 
@@ -310,3 +307,4 @@ export const useValidation = () => {
     sanitize,
   };
 };
+

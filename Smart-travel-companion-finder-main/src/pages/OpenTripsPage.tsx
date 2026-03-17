@@ -29,15 +29,6 @@ const REQUEST_PAGE_SIZE = 6;
 const TOKEN_STORAGE_KEY = 'tcf_token';
 const DEFAULT_TRIP_IMAGE = '/images/destinations/default-trip.svg';
 
-const isValidImageUrl = (value: string): boolean => {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
-};
-
 export default function OpenTripsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -54,7 +45,6 @@ export default function OpenTripsPage() {
   const [travelType, setTravelType] = useState<Trip['travelType']>('Leisure');
   const [companionsNeeded, setCompanionsNeeded] = useState(1);
   const [notes, setNotes] = useState('');
-  const [customImageUrl, setCustomImageUrl] = useState('');
   const [postError, setPostError] = useState('');
   const [postSuccess, setPostSuccess] = useState('');
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -117,14 +107,10 @@ export default function OpenTripsPage() {
     [destination, allDestinations],
   );
 
-  const customImage = customImageUrl.trim();
-  const customImageValid = !customImage || isValidImageUrl(customImage);
-
   const placeImage = useMemo(() => {
-    if (customImageValid && customImage) return customImage;
     if (destinationMeta?.image) return destinationMeta.image;
     return DEFAULT_TRIP_IMAGE;
-  }, [customImage, customImageValid, destinationMeta]);
+  }, [destinationMeta]);
 
   const today = useMemo(() => {
     const d = new Date();
@@ -190,7 +176,6 @@ export default function OpenTripsPage() {
   const validateInputs = () => {
     if (!destination.trim()) return 'Destination is required.';
     if (!startDate || !endDate) return 'Select start and end dates.';
-    if (!customImageValid) return 'Custom image URL must be a valid http/https link.';
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (new Date(startDate) < today) return 'Start date cannot be in the past.';
@@ -243,7 +228,6 @@ export default function OpenTripsPage() {
     setPostError('');
     setPostSuccess('Your trip plan is now live!');
     setNotes('');
-    setCustomImageUrl('');
     setCompanionsNeeded(1);
     setMode('browse');
     setStatusFilter('Active');
@@ -348,22 +332,6 @@ export default function OpenTripsPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Custom Image URL (optional)</label>
-                <input
-                  type="url"
-                  value={customImageUrl}
-                  onChange={(e) => setCustomImageUrl(e.target.value)}
-                  placeholder="https://example.com/location-photo.jpg"
-                  className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
-                />
-                <p className={`text-xs mt-1.5 ${customImage && !customImageValid ? 'text-red-600' : 'text-gray-500'}`}>
-                  {customImage && !customImageValid
-                    ? 'Enter a valid image link starting with http:// or https://'
-                    : 'Leave empty to auto-use destination image or default trip image.'}
-                </p>
-              </div>
-
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-gray-500">Start Date</label>
@@ -397,9 +365,7 @@ export default function OpenTripsPage() {
                     <select value={travelType} onChange={(e) => setTravelType(e.target.value as Trip['travelType'])} className="w-full border border-gray-200 rounded-xl py-2.5 pl-9 pr-3 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors">
                       <option>Leisure</option>
                       <option>Adventure</option>
-                      <option>Backpacking</option>
-                      <option>Business</option>
-                      <option>Standard</option>
+                      <option>Backpacker</option>
                       <option>Luxury</option>
                     </select>
                   </div>
@@ -512,7 +478,7 @@ export default function OpenTripsPage() {
               </button>
             ))}
             <div className="w-px h-6 bg-gray-200 self-center mx-1" />
-            {(['All', 'Leisure', 'Adventure', 'Backpacking', 'Business', 'Standard', 'Luxury'] as const).map((chip) => (
+            {(['All', 'Leisure', 'Adventure', 'Backpacker', 'Luxury'] as const).map((chip) => (
               <button
                 key={chip}
                 type="button"
@@ -656,3 +622,4 @@ export default function OpenTripsPage() {
     </div>
   );
 }
+
