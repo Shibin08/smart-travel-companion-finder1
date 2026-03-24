@@ -33,7 +33,28 @@ interface ToastState {
   message: string;
 }
 
-const EMOJI_LIST = ['ðŸ˜€', 'ðŸ˜‚', 'ðŸ˜', 'ðŸ¥°', 'ðŸ˜Ž', 'ðŸ¤”', 'ðŸ‘', 'ðŸ‘Ž', 'â¤ï¸', 'ðŸ”¥', 'ðŸŽ‰', 'âœˆï¸', 'ðŸŒ', 'ðŸ–ï¸', 'â›°ï¸', 'ðŸ—ºï¸', 'ðŸ˜¢', 'ðŸ˜¡', 'ðŸ¤', 'âœ…', 'ðŸ’¯', 'ðŸ™', 'ðŸ‘‹', 'ðŸ¤©'];
+const EMOJI_SECTIONS = [
+  {
+    title: 'Smileys & Emotion',
+    emojis: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🥲', '☺️', '😊', '😇', '🙂', '🙃', '😉', '😌', '😍', '🥰', '😘', '😗', '😙', '😚', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥸', '🤩', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '☹️', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '😰', '😥', '😓', '🤗', '🤔', '🫣', '🤭', '🤫', '🤥', '😶', '😶‍🌫️', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😮‍💨', '😵', '😵‍💫', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠', '😈', '👿', '👹', '👺', '🤡', '💩', '👻', '💀', '☠️', '👽', '👾', '🤖'],
+  },
+  {
+    title: 'Gestures & Hands',
+    emojis: ['👋', '🤚', '🖐️', '✋', '🖖', '👌', '🤌', '🤏', '✌️', '🤞', '🫰', '🤟', '🤘', '🤙', '👈', '👉', '👆', '👇', '☝️', '👍', '👎', '✊', '👊', '🤛', '🤜', '👏', '🙌', '🫶', '👐', '🤲', '🤝', '🙏'],
+  },
+  {
+    title: 'Travel & Places',
+    emojis: ['✈️', '🛫', '🛬', '🌍', '🌎', '🌏', '🗺️', '🏔️', '⛰️', '🌋', '🗻', '🏕️', '🏖️', '🏜️', '🏝️', '🏞️', '🏟️', '🏛️', '🏗️', '🧱', '🪨', '🪵', '🛖', '🏘️', '🏚️', '🏠', '🏡', '🏢', '🏣', '🏤', '🏥', '🏦', '🏨', '🏩', '🏪', '🏫', '🏬', '🏭', '🏯', '🏰', '💒', '🗼', '🗽', '⛪', '🕌', '🛕', '🕍', '⛩️', '🕋', '⛲', '⛺', '🌁', '🌃', '🏙️', '🌄', '🌅', '🌆', '🌇', '🌉', '♨️', '🎠', '🎡', '🎢', '💈', '🎪', '🚂', '🚃', '🚄', '🚅', '🚆', '🚇', '🚈', '🚉', '🚊', '🚝', '🚞', '🚋', '🚌', '🚍', '🚎', '🚐', '🚑', '🚒', '🚓', '🚔', '🚕', '🚖', '🚗', '🚘', '🚙', '🛻', '🚚', '🚛', '🚜', '🏎️', '🏍️', '🛵', '🦽', '🦼', '🛺', '🚲', '🛴', '🛹', '🛼', '🚏', '🛣️', '🛤️', '🛢️', '🚨', '🚥', '🚦', '🛑', '🚧', '⚓', '⛵', '🛶', '🚤', '🛳️', '⛴️', '🛥️', '🚢', '🚀', '🛸', '🚁', '🛩️', '🛰️', '💺', '🎒', '🧳'],
+  },
+  {
+    title: 'Food & Drink',
+    emojis: ['🍔', '🍕', '🍟', '🌭', '🍿', '🥪', '🌮', '🌯', '🫔', '🥗', '🥘', '🫕', '🥫', '🍝', '🍜', '🍲', '🍛', '🍣', '🍱', '🥟', '🦪', '🍤', '🍙', '🍚', '🍘', '🍥', '🥠', '🥮', '🍢', '🍡', '🍧', '🍨', '🍦', '🥧', '🧁', '🍰', '🎂', '🍮', '🍭', '🍬', '🍫', '🍩', '🍪', '🌰', '🥜', '🍯', '🥛', '🍼', '🫖', '☕', '🍵', '🧃', '🥤', '🧋', '🍶', '🍺', '🍻', '🥂', '🍷', '🥃', '🍸', '🍹', '🧉', '🍾', '🧊', '🥄', '🍴', '🍽️', '🥣', '🥡', '🥢', '🧂'],
+  },
+  {
+    title: 'Symbols',
+    emojis: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🤎', '🖤', '🤍', '💔', '❣️', '💕', '💞', '💓', '💗', '💖', '💘', '💝', '💟', '🔥', '🎉', '✅', '💯', '✨', '⭐', '🌟', '💫', '💥', '💢', '💦', '💨', '💤', '🕳️', '🎊', '🎈', '📷', '📸', '📹'],
+  }
+];
 
 const CHAT_THEME = {
   myBubble: 'bg-cyan-600',
@@ -617,7 +638,7 @@ export default function ChatInterface({
             </div>
             <h4 className="mt-4 font-bold text-gray-800">No messages yet</h4>
             <p className="text-sm text-gray-500 mt-1">{introText}</p>
-            <p className="text-xs text-cyan-600 mt-3 bg-cyan-50 px-4 py-1.5 rounded-full font-medium">Say hello to start planning! ðŸ‘‹</p>
+            <p className="text-xs text-cyan-600 mt-3 bg-cyan-50 px-4 py-1.5 rounded-full font-medium">Say hello to start planning! 👋</p>
           </div>
         ) : (
           messages.map((msg, index) => {
@@ -750,20 +771,25 @@ export default function ChatInterface({
               <Smile size={20} />
             </button>
             {showEmojiPicker && (
-              <div className="absolute bottom-12 left-0 bg-white rounded-xl shadow-lg border border-gray-200 p-2 w-64 z-50">
-                <div className="grid grid-cols-8 gap-1">
-                  {EMOJI_LIST.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => insertEmoji(emoji)}
-                      className="text-xl hover:bg-gray-100 rounded p-1 transition-colors"
-                      aria-label={`Insert ${emoji}`}
-                    >
-                      {emoji}
-                    </button>
+                <div className="absolute bottom-12 left-0 bg-white rounded-xl shadow-lg border border-gray-200 p-3 w-72 z-50 max-h-80 overflow-y-auto">
+                  {EMOJI_SECTIONS.map((section) => (
+                    <div key={section.title} className="mb-3 last:mb-0">
+                      <h4 className="text-[10px] font-bold text-gray-400 mb-1.5 uppercase tracking-wider sticky top-0 bg-white/95 backdrop-blur py-1 z-10">{section.title}</h4>
+                      <div className="grid grid-cols-8 gap-1">
+                        {section.emojis.map((emoji, index) => (
+                          <button
+                            key={`${section.title}-${index}`}
+                            type="button"
+                            onClick={() => insertEmoji(emoji)}
+                            className="text-xl hover:bg-gray-100 rounded p-1 transition-colors flex items-center justify-center"
+                            aria-label={`Insert ${emoji}`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   ))}
-                </div>
               </div>
             )}
           </div>
@@ -812,5 +838,3 @@ export default function ChatInterface({
     </div>
   );
 }
-
-

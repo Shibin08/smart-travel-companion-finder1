@@ -74,7 +74,12 @@ export default function ProfilePage() {
 
   const handleBasicChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: name === 'age' ? Number(value) : value }));
+    if (name === 'age') {
+      const nextAge = value.trim() === '' ? undefined : Number(value);
+      setFormData((prev) => ({ ...prev, age: nextAge }));
+      return;
+    }
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleProfileChange = <K extends keyof TravelProfile>(field: K, value: TravelProfile[K]) => {
@@ -353,7 +358,15 @@ export default function ProfilePage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">Age</label>
-                <input name="age" type="number" min={18} value={formData.age ?? 18} onChange={handleBasicChange} className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors" />
+                <input
+                  name="age"
+                  type="number"
+                  min={18}
+                  value={typeof formData.age === 'number' && formData.age > 0 ? formData.age : ''}
+                  onChange={handleBasicChange}
+                  placeholder="Enter age"
+                  className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
+                />
               </div>
             </div>
 
@@ -370,10 +383,16 @@ export default function ProfilePage() {
               <div>
                 <label className="text-sm font-medium text-gray-700">Personality</label>
                 <select
-                  value={formData.profile?.personality ?? 'Ambivert'}
-                  onChange={(e) => handleProfileChange('personality', e.target.value as TravelProfile['personality'])}
+                  value={formData.profile?.personality ?? ''}
+                  onChange={(e) =>
+                    handleProfileChange(
+                      'personality',
+                      (e.target.value || undefined) as TravelProfile['personality'],
+                    )
+                  }
                   className="mt-1 w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm bg-gray-50/50 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-colors"
                 >
+                  <option value="">Select personality</option>
                   <option value="Introvert">Introvert</option>
                   <option value="Extrovert">Extrovert</option>
                   <option value="Ambivert">Ambivert</option>
