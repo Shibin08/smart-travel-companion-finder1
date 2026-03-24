@@ -29,7 +29,7 @@ from slowapi.errors import RateLimitExceeded
 
 from auth import create_access_token, get_current_user, hash_password, verify_password
 from config import GOOGLE_CLIENT_ID
-from database import Base, engine, ensure_match_pair_guard, get_db
+from database import Base, engine, ensure_match_pair_guard, ensure_user_personality_column, get_db
 from matching import find_matches, get_user_matches, store_match, update_match_status
 from models import ReviewVote, User
 from chat import router as chat_router
@@ -85,6 +85,7 @@ app.include_router(place_requests_router)
 @app.on_event("startup")
 def startup_db_guards() -> None:
     """Apply DB guardrails and lightweight schema safety checks."""
+    ensure_user_personality_column()
     # Ensure review helpful-vote table exists in existing local DBs
     # that were created before ReviewVote was introduced.
     ReviewVote.__table__.create(bind=engine, checkfirst=True)
@@ -174,6 +175,7 @@ def get_user_public_profile(
         "name": db_user.name,
         "photo_url": db_user.photo_url,
         "gender": db_user.gender or "Other",
+        "personality_type": db_user.personality_type,
         "age": db_user.age,
         "travel_style": db_user.travel_style,
         "interests": db_user.interests,
@@ -522,6 +524,8 @@ def update_profile(
         user.interests = update_data.interests
     if update_data.travel_style is not None:
         user.travel_style = update_data.travel_style
+    if update_data.personality_type is not None:
+        user.personality_type = update_data.personality_type
     if update_data.language_preference is not None:
         user.language_preference = update_data.language_preference
     if update_data.discoverable is not None:

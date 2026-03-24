@@ -741,6 +741,7 @@ export interface BackendMyProfile {
   budget_range: number | null;
   interests: string | null;
   travel_style: string | null;
+  personality_type: string | null;
   language_preference: string | null;
   discoverable: boolean;
   created_at: string | null;
@@ -775,6 +776,7 @@ export interface UpdateProfileRequest {
   budget_range?: number;
   interests?: string;
   travel_style?: string;
+  personality_type?: string | null;
   language_preference?: string;
   discoverable?: boolean;
 }

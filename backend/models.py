@@ -32,6 +32,7 @@ class User(Base):
     interests = Column(String)
     travel_style = Column(String)
     language_preference = Column(String, nullable=True)
+    personality_type = Column(String, nullable=True)
     gender = Column(String, default="Other")
     age = Column(Integer, nullable=True)
     bio = Column(String, nullable=True)

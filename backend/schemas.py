@@ -48,6 +48,7 @@ class UserResponse(BaseModel):
     budget_range: Optional[float] = None
     interests: Optional[str] = None
     travel_style: Optional[str] = None
+    personality_type: Optional[str] = None
     language_preference: Optional[str] = None
     discoverable: bool
     created_at: Optional[datetime] = None
@@ -293,6 +294,7 @@ class UpdateProfileRequest(BaseModel):
     budget_range: Optional[float] = Field(None, ge=0, le=1_000_000)
     interests: Optional[str] = Field(None, max_length=1000)
     travel_style: Optional[str] = Field(None, max_length=50)
+    personality_type: Optional[str] = Field(None, pattern=r'^(Introvert|Extrovert|Ambivert)$')
     language_preference: Optional[str] = Field(None, max_length=100)
     discoverable: Optional[bool] = None
 

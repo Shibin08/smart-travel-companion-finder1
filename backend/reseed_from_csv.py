@@ -76,6 +76,17 @@ def _normalize_gender(value: str | None) -> str:
     return "Other"
 
 
+def _normalize_personality(value: str | None) -> str | None:
+    raw = (value or "").strip().lower()
+    if raw == "introvert":
+        return "Introvert"
+    if raw == "extrovert":
+        return "Extrovert"
+    if raw == "ambivert":
+        return "Ambivert"
+    return None
+
+
 def _resolve_sqlite_db_path() -> Path | None:
     if not DATABASE_URL.startswith("sqlite:///"):
         return None
@@ -149,6 +160,7 @@ def reseed(csv_path: Path, default_password: str, create_backup: bool = True) ->
                 budget_range=_budget_to_amount(row.get("budget_range")),
                 interests=(row.get("interests") or "").strip() or None,
                 travel_style=_normalize_style(row.get("travel_style")),
+                personality_type=_normalize_personality(row.get("personality_type")),
                 language_preference=None,
                 gender=_normalize_gender(row.get("gender")),
                 age=_parse_int(row.get("age")),

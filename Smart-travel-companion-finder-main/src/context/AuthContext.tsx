@@ -27,6 +27,15 @@ const normalizeTravelStyle = (value?: string | null): User['profile']['travelSty
     return 'Adventure';
 };
 
+const normalizePersonality = (
+    value?: string | null,
+): User['profile']['personality'] | undefined => {
+    if (value === 'Introvert' || value === 'Extrovert' || value === 'Ambivert') {
+        return value;
+    }
+    return undefined;
+};
+
 interface AuthContextType {
     user: User | null;
     login: (email: string, password: string) => Promise<boolean>;
@@ -145,6 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         budget: budgetLabel as 'Low' | 'Medium' | 'High',
                         travelStyle: normalizeTravelStyle(profile.travel_style),
                         interests: profile.interests ? profile.interests.split(/[|,]/).map((s: string) => s.trim()).filter(Boolean) : [],
+                        personality: normalizePersonality(profile.personality_type),
                         languagePreference: profile.language_preference || undefined,
                     },
                     preferences: {
@@ -231,6 +241,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                         budget: budgetLabel as 'Low' | 'Medium' | 'High',
                         travelStyle: normalizeTravelStyle(profile.travel_style),
                         interests: profile.interests ? profile.interests.split(/[|,]/).map((s: string) => s.trim()).filter(Boolean) : [],
+                        personality: normalizePersonality(profile.personality_type),
                         languagePreference: profile.language_preference || undefined,
                     },
                     preferences: {
@@ -310,6 +321,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const token = localStorage.getItem(TOKEN_STORAGE_KEY);
         if (token) {
             try {
+                const hasPersonalityField = updates.profile
+                    ? Object.prototype.hasOwnProperty.call(updates.profile, 'personality')
+                    : false;
                 await updateUserProfile(token, {
                     name: updates.name,
                     gender: updates.gender,
@@ -328,6 +342,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     }[updates.profile.budget] : undefined,
                     interests: updates.profile?.interests?.join('|'),
                     travel_style: updates.profile?.travelStyle,
+                    personality_type: hasPersonalityField ? (updates.profile?.personality ?? null) : undefined,
                     language_preference: updates.profile?.languagePreference,
                     discoverable: true,
                 });

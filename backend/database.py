@@ -14,6 +14,20 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def ensure_user_personality_column() -> None:
+    """Ensure users table has personality_type column for profile persistence."""
+    inspector = inspect(engine)
+    if "users" not in inspector.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in inspector.get_columns("users")}
+    if "personality_type" in existing_cols:
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE users ADD COLUMN personality_type VARCHAR"))
+
+
 def ensure_match_pair_guard() -> None:
     """Ensure one unique match row per user pair (A,B == B,A)."""
     inspector = inspect(engine)
