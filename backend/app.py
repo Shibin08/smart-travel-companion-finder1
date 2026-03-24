@@ -31,7 +31,7 @@ from auth import create_access_token, get_current_user, hash_password, verify_pa
 from config import GOOGLE_CLIENT_ID
 from database import Base, engine, ensure_match_pair_guard, get_db
 from matching import find_matches, get_user_matches, store_match, update_match_status
-from models import User
+from models import ReviewVote, User
 from chat import router as chat_router
 from reviews import router as reviews_router
 from emergency import router as emergency_router
@@ -84,7 +84,10 @@ app.include_router(place_requests_router)
 
 @app.on_event("startup")
 def startup_db_guards() -> None:
-    """Apply DB guardrails needed by runtime logic."""
+    """Apply DB guardrails and lightweight schema safety checks."""
+    # Ensure review helpful-vote table exists in existing local DBs
+    # that were created before ReviewVote was introduced.
+    ReviewVote.__table__.create(bind=engine, checkfirst=True)
     ensure_match_pair_guard()
 
 
