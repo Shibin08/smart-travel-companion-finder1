@@ -77,6 +77,10 @@ class Match(Base):
     user2_id = Column(String, ForeignKey("users.user_id"), nullable=False, index=True)
     compatibility_score = Column(Float, nullable=False)
     status = Column(String, default="pending")  # pending / accepted / rejected
+    user1_trip_start_date = Column(DateTime, nullable=True)
+    user1_trip_end_date = Column(DateTime, nullable=True)
+    user2_trip_start_date = Column(DateTime, nullable=True)
+    user2_trip_end_date = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships

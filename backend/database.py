@@ -70,6 +70,62 @@ def ensure_match_pair_guard() -> None:
         )
 
 
+def ensure_match_trip_snapshot_columns() -> None:
+    """Ensure match table keeps per-pair trip date snapshots."""
+    inspector = inspect(engine)
+    if "matches" not in inspector.get_table_names():
+        return
+
+    existing_cols = {col["name"] for col in inspector.get_columns("matches")}
+    required_columns = {
+        "user1_trip_start_date": "DATETIME",
+        "user1_trip_end_date": "DATETIME",
+        "user2_trip_start_date": "DATETIME",
+        "user2_trip_end_date": "DATETIME",
+    }
+
+    missing = [
+        (name, col_type)
+        for name, col_type in required_columns.items()
+        if name not in existing_cols
+    ]
+    with engine.begin() as conn:
+        for name, col_type in missing:
+            conn.execute(text(f"ALTER TABLE matches ADD COLUMN {name} {col_type}"))
+
+        # Backfill historical rows once: freeze match trip context using
+        # the current user trip dates if snapshot fields are still empty.
+        conn.execute(
+            text(
+                """
+                UPDATE matches
+                SET
+                    user1_trip_start_date = COALESCE(
+                        user1_trip_start_date,
+                        (SELECT start_date FROM users WHERE users.user_id = matches.user1_id)
+                    ),
+                    user1_trip_end_date = COALESCE(
+                        user1_trip_end_date,
+                        (SELECT end_date FROM users WHERE users.user_id = matches.user1_id)
+                    ),
+                    user2_trip_start_date = COALESCE(
+                        user2_trip_start_date,
+                        (SELECT start_date FROM users WHERE users.user_id = matches.user2_id)
+                    ),
+                    user2_trip_end_date = COALESCE(
+                        user2_trip_end_date,
+                        (SELECT end_date FROM users WHERE users.user_id = matches.user2_id)
+                    )
+                WHERE
+                    user1_trip_start_date IS NULL
+                    OR user1_trip_end_date IS NULL
+                    OR user2_trip_start_date IS NULL
+                    OR user2_trip_end_date IS NULL
+                """
+            )
+        )
+
+
 def get_db():
     db = SessionLocal()
     try:

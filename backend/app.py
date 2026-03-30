@@ -29,7 +29,14 @@ from slowapi.errors import RateLimitExceeded
 
 from auth import create_access_token, get_current_user, hash_password, verify_password
 from config import GOOGLE_CLIENT_ID
-from database import Base, engine, ensure_match_pair_guard, ensure_user_personality_column, get_db
+from database import (
+    Base,
+    engine,
+    ensure_match_pair_guard,
+    ensure_match_trip_snapshot_columns,
+    ensure_user_personality_column,
+    get_db,
+)
 from matching import find_matches, get_user_matches, store_match, update_match_status
 from models import ReviewVote, User
 from chat import router as chat_router
@@ -86,6 +93,7 @@ app.include_router(place_requests_router)
 def startup_db_guards() -> None:
     """Apply DB guardrails and lightweight schema safety checks."""
     ensure_user_personality_column()
+    ensure_match_trip_snapshot_columns()
     # Ensure review helpful-vote table exists in existing local DBs
     # that were created before ReviewVote was introduced.
     ReviewVote.__table__.create(bind=engine, checkfirst=True)

@@ -179,16 +179,14 @@ class CoreFlowSmokeTest(unittest.TestCase):
         )
         self.assertEqual(early_end.status_code, 400, msg=early_end.text)
 
-        # Move both trips into the past to unlock end-chat.
+        # Move this match's snapshotted trip end-dates into the past to unlock end-chat.
         session = SessionLocal()
         try:
             yday = datetime.now() - timedelta(days=1)
-            u1 = session.query(User).filter(User.user_id == uid1).first()
-            u2 = session.query(User).filter(User.user_id == uid2).first()
-            self.assertIsNotNone(u1)
-            self.assertIsNotNone(u2)
-            u1.end_date = yday
-            u2.end_date = yday
+            match_row = session.query(Match).filter(Match.match_id == match_id).first()
+            self.assertIsNotNone(match_row)
+            match_row.user1_trip_end_date = yday
+            match_row.user2_trip_end_date = yday
             session.commit()
         finally:
             session.close()

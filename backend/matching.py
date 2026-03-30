@@ -680,11 +680,25 @@ def store_match(
     if existing:
         return existing, False
 
+    user_rows = (
+        db.query(User.user_id, User.start_date, User.end_date)
+        .filter(User.user_id.in_([user1_id, user2_id]))
+        .all()
+    )
+    snapshot_by_user_id = {
+        uid: {"start_date": start_date, "end_date": end_date}
+        for uid, start_date, end_date in user_rows
+    }
+
     new_match = Match(
         user1_id=user1_id,
         user2_id=user2_id,
         compatibility_score=compatibility_score,
         status="pending",
+        user1_trip_start_date=snapshot_by_user_id.get(user1_id, {}).get("start_date"),
+        user1_trip_end_date=snapshot_by_user_id.get(user1_id, {}).get("end_date"),
+        user2_trip_start_date=snapshot_by_user_id.get(user2_id, {}).get("start_date"),
+        user2_trip_end_date=snapshot_by_user_id.get(user2_id, {}).get("end_date"),
     )
     db.add(new_match)
     try:
@@ -750,14 +764,25 @@ def get_user_matches(
     results: list[dict] = []
     for match, other_user in rows:
         review_stats = review_stats_by_user.get(other_user.user_id)
+        if match.user1_id == current_user_id:
+            current_pair_end_date = match.user1_trip_end_date
+            other_pair_end_date = match.user2_trip_end_date
+        else:
+            current_pair_end_date = match.user2_trip_end_date
+            other_pair_end_date = match.user1_trip_end_date
+        if current_pair_end_date is None:
+            current_pair_end_date = current_user_end_date
+        if other_pair_end_date is None:
+            other_pair_end_date = other_user.end_date
+
         trip_completed = _is_trip_completed_for_pair(
-            current_user_end_date,
-            other_user.end_date,
+            current_pair_end_date,
+            other_pair_end_date,
         )
         can_current_user_end_chat = match.status == "accepted" and trip_completed
         end_chat_available_on = _end_chat_available_on(
-            current_user_end_date,
-            other_user.end_date,
+            current_pair_end_date,
+            other_pair_end_date,
         )
         results.append(
             {
@@ -839,15 +864,22 @@ def update_match_status(
 
     # End-chat guard: accepted -> cancelled only after both trips are completed.
     if match.status == "accepted" and new_status == "cancelled":
-        user_rows = (
-            db.query(User.user_id, User.end_date)
-            .filter(User.user_id.in_([match.user1_id, match.user2_id]))
-            .all()
-        )
-        end_dates = {uid: end_date for uid, end_date in user_rows}
+        user1_end_date = match.user1_trip_end_date
+        user2_end_date = match.user2_trip_end_date
+        if user1_end_date is None or user2_end_date is None:
+            user_rows = (
+                db.query(User.user_id, User.end_date)
+                .filter(User.user_id.in_([match.user1_id, match.user2_id]))
+                .all()
+            )
+            end_dates = {uid: end_date for uid, end_date in user_rows}
+            if user1_end_date is None:
+                user1_end_date = end_dates.get(match.user1_id)
+            if user2_end_date is None:
+                user2_end_date = end_dates.get(match.user2_id)
         if not _is_trip_completed_for_pair(
-            end_dates.get(match.user1_id),
-            end_dates.get(match.user2_id),
+            user1_end_date,
+            user2_end_date,
         ):
             raise ValueError(
                 "End chat is allowed only after both travelers complete the trip"
